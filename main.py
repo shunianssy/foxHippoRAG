@@ -2,9 +2,9 @@ import os
 from typing import List
 import json
 
-from src.hipporag.HippoRAG import HippoRAG
-from src.hipporag.utils.misc_utils import string_to_bool
-from src.hipporag.utils.config_utils import BaseConfig
+from src.foxhipporag.foxHippoRAG import foxHippoRAG
+from src.foxhipporag.utils.misc_utils import string_to_bool
+from src.foxhipporag.utils.config_utils import BaseConfig
 
 import argparse
 
@@ -131,12 +131,12 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
 
-    hipporag = HippoRAG(global_config=config)
+    foxhipporag = foxHippoRAG(global_config=config)
 
-    hipporag.index(docs)
+    foxhipporag.index(docs)
 
     # Retrieval and QA
-    hipporag.rag_qa(queries=all_queries, gold_docs=gold_docs, gold_answers=gold_answers)
+    foxhipporag.rag_qa(queries=all_queries, gold_docs=gold_docs, gold_answers=gold_answers)
 
 if __name__ == "__main__":
     main()

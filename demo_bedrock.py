@@ -1,4 +1,4 @@
-from hipporag import HippoRAG
+from foxhipporag import foxHippoRAG
 
 
 def main():
@@ -15,18 +15,18 @@ def main():
         "Montebello is a part of Rockland County."
     ]
 
-    save_dir = 'outputs/bedrock'  # Define save directory for HippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
+    save_dir = 'outputs/bedrock'  # Define save directory for foxHippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
     llm_model_name = 'bedrock/anthropic.claude-3-5-haiku-20241022-v1:0'  # Any Bedrock model name
     embedding_model_name = 'cohere.embed-multilingual-v3'  
 
 
-    print("Startup a HippoRAG instance")
-    hipporag = HippoRAG(save_dir=save_dir,
+    print("Startup a foxHippoRAG instance")
+    foxhipporag = foxHippoRAG(save_dir=save_dir,
                         llm_model_name=llm_model_name,
                         embedding_model_name=embedding_model_name)
 
     print("Run indexing")
-    hipporag.index(docs=docs)
+    foxhipporag.index(docs=docs)
 
     # Separate Retrieval & QA
     queries = [
@@ -52,7 +52,7 @@ def main():
     ]
 
     print("RAG Q&A")
-    print(hipporag.rag_qa(
+    print(foxhipporag.rag_qa(
                 queries=queries,
                 gold_docs=gold_docs,
                 gold_answers=answers))

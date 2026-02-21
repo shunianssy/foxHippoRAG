@@ -1,49 +1,62 @@
-# Contributing to HippoRAG
+# Contributing to foxHippoRAG
 
-Thank you for your interest in contributing to HippoRAG!
-We are happy to welcome contributions from the community to help us improve our project.
+Thank you for your interest in contributing to foxHippoRAG!
 
 ## How to Contribute
 
-1. Fork the repository and clone it to your local machine.
-2. Create a new branch for your contribution: `git checkout -b my-contribution`.
-3. Make your changes and ensure that the code passes our test scripts. More information can be found in the `Testing` section of our `README.md`. 
-4. Commit your changes: `git commit -m "Add my contribution"`.
-6. Push your changes to your forked repository: `git push origin my-contribution`.
-7. Open a pull request to the main repository.
+### 1. Setting Up Your Development Environment
 
-## Before you start, file an issue
+```bash
+# Clone the repository
+git clone https://github.com/shunianssy/foxHippoRAG.git
+cd foxHippoRAG
 
-Please follow this simple rule to help us eliminate any unnecessary wasted effort & frustration, and ensure an efficient and effective use of everyone's time - yours, ours, and other community members':
+# Create and activate virtual environment
+conda create -n foxhipporag-dev python=3.10
+conda activate foxhipporag-dev
 
-> 👉 If you have a question, think you've discovered an issue, would like to propose a new feature, etc., then find/file an issue **BEFORE** starting work to fix/implement it.
+# Install development dependencies
+pip install -e .
+pip install -r requirements.txt
+```
 
-### Search existing issues first
+### 2. Making Changes
 
-Before filing a new issue, search existing open and closed issues first: This project is moving fast! It is likely someone else has found the problem you're seeing, and someone may be working on or have already contributed a fix!
+- **Code Style**: Follow the existing code style and conventions.
+- **Testing**: Add tests for any new functionality.
+- **Documentation**: Update documentation for any changes.
 
-If no existing item describes your issue/feature, great - please file a new issue:
+### 3. Running Tests
 
-### File a new Issue
+```bash
+# Run OpenAI tests (requires API key)
+export OPENAI_API_KEY=<your-api-key>
+python tests_openai.py
 
-- Don't know whether you're reporting an issue or requesting a feature? File an issue
-- Have a question that you don't see answered in docs, videos, etc.? File an issue
-- Want to know if we're planning on building a particular feature? File an issue
-- Got a great idea for a new feature? File an issue/request/idea
-- Don't understand how to do something? File an issue
-- Found an existing issue that describes yours? Great - upvote and add additional commentary / info / repro-steps / etc.
- 
-Provide as much detail as possible to help us understand and address the problem.
+# Run local tests (requires vLLM server)
+python tests_local.py
 
----
+# Run Azure tests (requires Azure endpoints)
+python tests_azure.py
+```
 
-### Credits
+### 4. Submitting a Pull Request
 
-This contributing guide was adapted from the [GraphRAG](https://github.com/microsoft/graphrag) project. Many thanks to the team for providing a useful starting point!
+1. Create a new branch for your changes
+2. Commit your changes with clear commit messages
+3. Push your branch to GitHub
+4. Create a pull request with a description of your changes
 
----
+## Code of Conduct
 
-## Thank you
+Please be respectful and constructive in your contributions. All contributors are expected to follow our code of conduct.
 
-We appreciate your contributions to HippoRAG!
+## Reporting Issues
 
+If you find a bug or have a feature request, please open an issue on GitHub.
+
+## License
+
+By contributing to foxHippoRAG, you agree that your contributions will be licensed under the MIT License.
+
+We appreciate your contributions to foxHippoRAG!

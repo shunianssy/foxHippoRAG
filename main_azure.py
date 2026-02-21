@@ -2,9 +2,9 @@ import os
 from typing import List
 import json
 
-from src.hipporag.HippoRAG import HippoRAG
-from src.hipporag.utils.misc_utils import string_to_bool
-from src.hipporag.utils.config_utils import BaseConfig
+from src.foxhipporag.foxHippoRAG import foxHippoRAG
+from src.foxhipporag.utils.misc_utils import string_to_bool
+from src.foxhipporag.utils.config_utils import BaseConfig
 
 import argparse
 
@@ -70,7 +70,7 @@ def get_gold_answers(samples):
     return gold_answers
 
 def main():
-    parser = argparse.ArgumentParser(description="HippoRAG retrieval and QA")
+    parser = argparse.ArgumentParser(description="foxHippoRAG retrieval and QA")
     parser.add_argument('--dataset', type=str, default='musique', help='Dataset name')
     parser.add_argument('--llm_base_url', type=str, default='https://api.openai.com/v1', help='LLM base URL')
     parser.add_argument('--llm_name', type=str, default='gpt-4o-mini', help='LLM name')
@@ -141,12 +141,12 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
 
-    hipporag = HippoRAG(global_config=config)
+    foxhipporag = foxHippoRAG(global_config=config)
 
-    hipporag.index(docs)
+    foxhipporag.index(docs)
 
     # Retrieval and QA
-    hipporag.rag_qa(queries=all_queries, gold_docs=gold_docs, gold_answers=gold_answers)
+    foxhipporag.rag_qa(queries=all_queries, gold_docs=gold_docs, gold_answers=gold_answers)
 
 if __name__ == "__main__":
     main()

@@ -4,7 +4,7 @@ import json
 import argparse
 import logging
 
-from src.hipporag import HippoRAG
+from src.foxhipporag import foxHippoRAG
 
 def main():
 
@@ -22,12 +22,12 @@ def main():
         "Montebello is a part of Rockland County.."
     ]
 
-    save_dir = 'outputs/azure'  # Define save directory for HippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
+    save_dir = 'outputs/azure'  # Define save directory for foxHippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
     llm_model_name = 'gpt-4o-mini'  # Any OpenAI model name
     embedding_model_name = 'text-embedding-3-small'  # Embedding model name (NV-Embed, GritLM or Contriever for now)
 
-    # Startup a HippoRAG instance
-    hipporag = HippoRAG(save_dir=save_dir,
+    # Startup a foxHippoRAG instance
+    foxhipporag = foxHippoRAG(save_dir=save_dir,
                         llm_model_name=llm_model_name,
                         embedding_model_name=embedding_model_name,
                         azure_endpoint="https://[ENDPOINT NAME].openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview",
@@ -35,7 +35,7 @@ def main():
                         )
 
     # Run indexing
-    hipporag.index(docs=docs)
+    foxhipporag.index(docs=docs)
 
     # Separate Retrieval & QA
     queries = [
@@ -60,7 +60,7 @@ def main():
          "Montebello is a part of Rockland County."]
     ]
 
-    print(hipporag.rag_qa(queries=queries,
+    print(foxhipporag.rag_qa(queries=queries,
                                   gold_docs=gold_docs,
                                   gold_answers=answers))
 
@@ -69,7 +69,7 @@ def main():
         "Montebello is a part of Rockland County.."
     ]
 
-    hipporag.delete(docs_to_delete)
+    foxhipporag.delete(docs_to_delete)
 
 if __name__ == "__main__":
     main()

@@ -1,34 +1,31 @@
-<h1 align="center">HippoRAG 2: From RAG to Memory</h1>
+<h1 align="center">foxHippoRAG: From RAG to Memory</h1>
 <p align="center">
-    <img src="https://github.com/OSU-NLP-Group/HippoRAG/raw/main/images/hippo_brain.png" width="55%" style="max-width: 300px;">
+    <img src="https://github.com/shunianssy/foxHippoRAG/raw/main/images/hippo_brain.png" width="55%" style="max-width: 300px;">
 </p>
 
 [<img align="center" src="https://colab.research.google.com/assets/colab-badge.svg" />](https://colab.research.google.com/drive/1nuelysWsXL8F5xH6q4JYJI8mvtlmeM9O#scrollTo=TjHdNe2KC81K)
 
-[<img align="center" src="https://img.shields.io/badge/arXiv-2502.14802 HippoRAG 2-b31b1b" />](https://arxiv.org/abs/2502.14802)
-[<img align="center" src="https://img.shields.io/badge/🤗 Dataset-HippoRAG 2-yellow" />](https://huggingface.co/datasets/osunlp/HippoRAG_2/tree/main)
-[<img align="center" src="https://img.shields.io/badge/arXiv-2405.14831 HippoRAG 1-b31b1b" />](https://arxiv.org/abs/2405.14831)
-[<img align="center" src="https://img.shields.io/badge/GitHub-HippoRAG 1-blue" />](https://github.com/OSU-NLP-Group/HippoRAG/tree/legacy)
+[<img align="center" src="https://img.shields.io/badge/GitHub-foxHippoRAG-blue" />](https://github.com/shunianssy/foxHippoRAG)
 
-### HippoRAG 2 is a powerful memory framework for LLMs that enhances their ability to recognize and utilize connections in new knowledge—mirroring a key function of human long-term memory.
+### foxHippoRAG 是一个强大的记忆框架，用于增强大型语言模型识别和利用新知识中连接的能力——这反映了人类长期记忆的关键功能。
 
-Our experiments show that HippoRAG 2 improves associativity (multi-hop retrieval) and sense-making (the process of integrating large and complex contexts) in even the most advanced RAG systems, without sacrificing their performance on simpler tasks.
+我们的实验表明，foxHippoRAG 在甚至最先进的 RAG 系统中也能提高关联性（多跳检索）和意义构建（整合大型复杂上下文的过程），同时不牺牲它们在简单任务上的性能。
 
-Like its predecessor, HippoRAG 2 remains cost and latency efficient in online processes, while using significantly fewer resources for offline indexing compared to other graph-based solutions such as GraphRAG, RAPTOR, and LightRAG.
+与之前的版本一样，foxHippoRAG 在在线过程中保持成本和延迟效率，同时与其他基于图的解决方案（如 GraphRAG、RAPTOR 和 LightRAG）相比，离线索引使用的资源显著减少。
 
 <p align="center">
-  <img align="center" src="https://github.com/OSU-NLP-Group/HippoRAG/raw/main/images/intro.png" />
+  <img align="center" src="https://github.com/shunianssy/foxHippoRAG/raw/main/images/intro.png" />
 </p>
 <p align="center">
-  <b>Figure 1:</b> Evaluation of continual learning capabilities across three key dimensions: factual memory (NaturalQuestions, PopQA), sense-making (NarrativeQA), and associativity (MuSiQue, 2Wiki, HotpotQA, and LV-Eval). HippoRAG 2 surpasses other methods across all
+  <b>Figure 1:</b> Evaluation of continual learning capabilities across three key dimensions: factual memory (NaturalQuestions, PopQA), sense-making (NarrativeQA), and associativity (MuSiQue, 2Wiki, HotpotQA, and LV-Eval). foxHippoRAG surpasses other methods across all
 categories, bringing it one step closer to true long-term memory.
 </p>
 
 <p align="center">
-  <img align="center" src="https://github.com/OSU-NLP-Group/HippoRAG/raw/main/images/methodology.png" />
+  <img align="center" src="https://github.com/shunianssy/foxHippoRAG/raw/main/images/methodology.png" />
 </p>
 <p align="center">
-  <b>Figure 2:</b> HippoRAG 2 methodology.
+  <b>Figure 2:</b> foxHippoRAG methodology.
 </p>
 
 #### Check out our papers to learn more:
@@ -41,9 +38,9 @@ categories, bringing it one step closer to true long-term memory.
 ## Installation
 
 ```sh
-conda create -n hipporag python=3.10
-conda activate hipporag
-pip install hipporag
+conda create -n foxhipporag python=3.10
+conda activate foxhipporag
+pip install foxHippoRAG
 ```
 Initialize the environmental variables and activate the environment:
 
@@ -52,17 +49,17 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 export HF_HOME=<path to Huggingface home directory>
 export OPENAI_API_KEY=<your openai api key>   # if you want to use OpenAI model
 
-conda activate hipporag
+conda activate foxhipporag
 ```
 
 ## Quick Start
 
 ### OpenAI Models
 
-This simple example will illustrate how to use `hipporag` with any OpenAI model:
+This simple example will illustrate how to use `foxHippoRAG` with any OpenAI model:
 
 ```python
-from hipporag import HippoRAG
+from foxhipporag import foxHippoRAG
 
 # Prepare datasets and evaluation
 docs = [
@@ -77,17 +74,17 @@ docs = [
     "Montebello is a part of Rockland County."
 ]
 
-save_dir = 'outputs'# Define save directory for HippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
+save_dir = 'outputs'# Define save directory for foxHippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
 llm_model_name = 'gpt-4o-mini' # Any OpenAI model name
 embedding_model_name = 'nvidia/NV-Embed-v2'# Embedding model name (NV-Embed, GritLM or Contriever for now)
 
-#Startup a HippoRAG instance
-hipporag = HippoRAG(save_dir=save_dir, 
+#Startup a foxHippoRAG instance
+foxhipporag = foxHippoRAG(save_dir=save_dir, 
                     llm_model_name=llm_model_name,
                     embedding_model_name=embedding_model_name) 
 
 #Run indexing
-hipporag.index(docs=docs)
+foxhipporag.index(docs=docs)
 
 #Separate Retrieval & QA
 queries = [
@@ -96,11 +93,11 @@ queries = [
     "What county is Erik Hort's birthplace a part of?"
 ]
 
-retrieval_results = hipporag.retrieve(queries=queries, num_to_retrieve=2)
-qa_results = hipporag.rag_qa(retrieval_results)
+retrieval_results = foxhipporag.retrieve(queries=queries, num_to_retrieve=2)
+qa_results = foxhipporag.rag_qa(retrieval_results)
 
 #Combined Retrieval & QA
-rag_results = hipporag.rag_qa(queries=queries)
+rag_results = foxhipporag.rag_qa(queries=queries)
 
 #For Evaluation
 answers = [
@@ -118,7 +115,7 @@ gold_docs = [
     "Montebello is a part of Rockland County."]
 ]
 
-rag_results = hipporag.rag_qa(queries=queries, 
+rag_results = foxhipporag.rag_qa(queries=queries, 
                               gold_docs=gold_docs,
                               gold_answers=answers)
 ```
@@ -128,7 +125,7 @@ rag_results = hipporag.rag_qa(queries=queries,
 If you want to use LLMs and Embeddings Compatible to OpenAI, please use the following methods.</p>
     
 ```python
-hipporag = HippoRAG(save_dir=save_dir, 
+foxhipporag = foxHippoRAG(save_dir=save_dir, 
     llm_model_name='Your LLM Model name',
     llm_base_url='Your LLM Model url',
     embedding_model_name='Your Embedding model name',  
@@ -137,7 +134,7 @@ hipporag = HippoRAG(save_dir=save_dir,
 
 ### Local Deployment (vLLM)
 
-This simple example will illustrate how to use `hipporag` with any vLLM-compatible locally deployed LLM.
+This simple example will illustrate how to use `foxHippoRAG` with any vLLM-compatible locally deployed LLM.
 
 1. Run a local [OpenAI-compatible vLLM server](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#quickstart-online) with specified GPUs (make sure you leave enough memory for your embedding model).
 
@@ -146,21 +143,21 @@ export CUDA_VISIBLE_DEVICES=0,1
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 export HF_HOME=<path to Huggingface home directory>
 
-conda activate hipporag  # vllm should be in this environment
+conda activate foxhipporag  # vllm should be in this environment
 
 # Tune gpu-memory-utilization or max_model_len to fit your GPU memory, if OOM occurs
 vllm serve meta-llama/Llama-3.3-70B-Instruct --tensor-parallel-size 2 --max_model_len 4096 --gpu-memory-utilization 0.95 
 ```
 
-2. Now you can use very similar code to the one above to use `hipporag`: 
+2. Now you can use very similar code to the one above to use `foxHippoRAG`:
 
 ```python
-save_dir = 'outputs'# Define save directory for HippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
+save_dir = 'outputs'# Define save directory for foxHippoRAG objects (each LLM/Embedding model combination will create a new subdirectory)
 llm_model_name = # Any OpenAI model name
 embedding_model_name = # Embedding model name (NV-Embed, GritLM or Contriever for now)
 llm_base_url= # Base url for your deployed LLM (i.e. http://localhost:8000/v1)
 
-hipporag = HippoRAG(save_dir=save_dir,
+foxhipporag = foxHippoRAG(save_dir=save_dir,
                     llm_model_name=llm_model,
                     embedding_model_name=embedding_model_name,
                     llm_base_url=llm_base_url)
@@ -170,19 +167,19 @@ hipporag = HippoRAG(save_dir=save_dir,
 
 ## Testing
 
-When making a contribution to HippoRAG, please run the scripts below to ensure that your changes do not result in unexpected behavior from our core modules. 
+When making a contribution to foxHippoRAG, please run the scripts below to ensure that your changes do not result in unexpected behavior from our core modules. 
 
-These scripts test for indexing, graph loading, document deletion and incremental updates to a HippoRAG object.
+These scripts test for indexing, graph loading, document deletion and incremental updates to a foxHippoRAG object.
 
 ### OpenAI Test
 
-To test HippoRAG with an OpenAI LLM and embedding model, simply run the following. 
+To test foxHippoRAG with an OpenAI LLM and embedding model, simply run the following. 
 The cost of this test will be negligible.
 
 ```sh
 export OPENAI_API_KEY=<your openai api key> 
 
-conda activate hipporag
+conda activate foxhipporag
 
 python tests_openai.py
 ```
@@ -196,7 +193,7 @@ export CUDA_VISIBLE_DEVICES=0
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 export HF_HOME=<path to Huggingface home directory>
 
-conda activate hipporag  # vllm should be in this environment
+conda activate foxhipporag  # vllm should be in this environment
 
 # Tune gpu-memory-utilization or max_model_len to fit your GPU memory, if OOM occurs
 vllm serve meta-llama/Llama-3.1-8B-Instruct --tensor-parallel-size 2 --max_model_len 4096 --gpu-memory-utilization 0.95 --port 6578
@@ -228,7 +225,7 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 export HF_HOME=<path to Huggingface home directory>
 export OPENAI_API_KEY=<your openai api key>   # if you want to use OpenAI model
 
-conda activate hipporag
+conda activate foxhipporag
 ```
 
 ### Run with OpenAI Model
@@ -249,7 +246,7 @@ export CUDA_VISIBLE_DEVICES=0,1
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 export HF_HOME=<path to Huggingface home directory>
 
-conda activate hipporag  # vllm should be in this environment
+conda activate foxhipporag  # vllm should be in this environment
 
 # Tune gpu-memory-utilization or max_model_len to fit your GPU memory, if OOM occurs
 vllm serve meta-llama/Llama-3.3-70B-Instruct --tensor-parallel-size 2 --max_model_len 4096 --gpu-memory-utilization 0.95 
@@ -275,7 +272,7 @@ vLLM offers an [offline batch mode](https://docs.vllm.ai/en/latest/getting_start
 export CUDA_VISIBLE_DEVICES=0,1,2,3 # use all GPUs for faster offline indexing
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 export HF_HOME=<path to Huggingface home directory>
-export OPENAI_API_KEY=''
+export OPENAI_API_KEY=''  
 dataset=sample
 
 python main.py --dataset $dataset --llm_name meta-llama/Llama-3.3-70B-Instruct --openie_mode offline --skip_graph
@@ -286,7 +283,7 @@ python main.py --dataset $dataset --llm_name meta-llama/Llama-3.3-70B-Instruct -
 ## Debugging Note
 
 - `/reproduce/dataset/sample.json` is a small dataset specifically for debugging.
-- When debugging vLLM offline mode, set `tensor_parallel_size` as `1` in `hipporag/llm/vllm_offline.py`.
+- When debugging vLLM offline mode, set `tensor_parallel_size` as `1` in `foxhipporag/llm/vllm_offline.py`.
 - If you want to rerun a particular experiment, remember to clear the saved files, including OpenIE results and knowledge graph, e.g.,
 
 ```sh
@@ -318,7 +315,6 @@ The corpus and optional query JSON files should have the following format:
 
 #### (Optional) Query JSON
 
-```json
 
 [
   {
@@ -354,7 +350,7 @@ When preparing your data, you may need to chunk each passage, as longer passage 
 
 ```
 📦 .
-│-- 📂 src/hipporag
+│-- 📂 src/foxhipporag
 │   ├── 📂 embedding_model          # Implementation of all embedding models
 │   │   ├── __init__.py             # Getter function for get specific embedding model classes
 |   |   ├── base.py                 # Base embedding model class `BaseEmbeddingModel` to inherit and `EmbeddingConfig`
@@ -390,7 +386,7 @@ When preparing your data, you may need to chunk each passage, as longer passage 
 │   │   ├── config_utils.py         # We use only one config across all modules and its setup is specified here
 |   |   ├── ...
 │   ├── __init__.py
-│   ├── HippoRAG.py          # Highest level class for initiating retrieval, question answering, and evaluations
+│   ├── foxHippoRAG.py          # Highest level class for initiating retrieval, question answering, and evaluations
 │   ├── embedding_store.py   # Storage database to load, manage and save embeddings for passages, entities and facts.
 │   ├── rerank.py            # Reranking and filtering methods
 │-- 📂 examples
@@ -406,10 +402,7 @@ When preparing your data, you may need to chunk each passage, as longer passage 
 ## Contact
 
 Questions or issues? File an issue or contact 
-[Bernal Jiménez Gutiérrez](mailto:jimenezgutierrez.1@osu.edu),
-[Yiheng Shu](mailto:shu.251@osu.edu),
-[Yu Su](mailto:su.809@osu.edu),
-The Ohio State University
+[shunianssy](mailto:shunianssy@example.com)
 
 ## Citation
 

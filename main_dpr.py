@@ -133,13 +133,13 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
 
-    hipporag = StandardRAG(global_config=config)
-    # hipporag = HippoRAG(global_config=config)
+    foxhipporag = StandardRAG(global_config=config)
+    # foxhipporag = foxHippoRAG(global_config=config)
 
-    hipporag.index(docs)
+    foxhipporag.index(docs)
 
     # Retrieval and QA
-    hipporag.rag_qa(queries=all_queries, gold_docs=gold_docs, gold_answers=gold_answers)
+    foxhipporag.rag_qa(queries=all_queries, gold_docs=gold_docs, gold_answers=gold_answers)
 
 if __name__ == "__main__":
     main()
