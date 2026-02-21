@@ -36,7 +36,7 @@ from .utils.config_utils import BaseConfig
 
 logger = logging.getLogger(__name__)
 
-class HippoRAG:
+class foxHippoRAG:
 
     def __init__(self,
                  global_config=None,
@@ -365,7 +365,7 @@ class HippoRAG:
                  num_to_retrieve: int = None,
                  gold_docs: List[List[str]] = None) -> List[QuerySolution] | Tuple[List[QuerySolution], Dict]:
         """
-        Performs retrieval using the HippoRAG 2 framework, which consists of several steps:
+        Performs retrieval using the foxHippoRAG framework, which consists of several steps:
         - Fact Retrieval
         - Recognition Memory for improved fact selection
         - Dense passage scoring
@@ -453,7 +453,7 @@ class HippoRAG:
                gold_docs: List[List[str]] = None,
                gold_answers: List[List[str]] = None) -> Tuple[List[QuerySolution], List[str], List[Dict]] | Tuple[List[QuerySolution], List[str], List[Dict], Dict, Dict]:
         """
-        Performs retrieval-augmented generation enhanced QA using the HippoRAG 2 framework.
+        Performs retrieval-augmented generation enhanced QA using the foxHippoRAG framework.
 
         This method can handle both string-based queries and pre-processed QuerySolution objects. Depending
         on its inputs, it returns answers only or additionally evaluate retrieval and answer quality using

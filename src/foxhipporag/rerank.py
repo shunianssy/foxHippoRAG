@@ -13,12 +13,12 @@ class Fact(BaseModel):
 
 
 class DSPyFilter:
-    def __init__(self, hipporag):
+    def __init__(self, foxhipporag):
         """
         Initializes the object with the necessary configurations and templates for processing input and output messages.
 
         Parameters:
-        hipporag : An object that provides the global configuration and the LLM model required for inference.
+        foxhipporag : An object that provides the global configuration and the LLM model required for inference.
 
         Attributes:
         dspy_file_path : The file path for reranking as specified in the global configuration.

@@ -56,7 +56,7 @@ def main():
          "Montebello is a part of Rockland County."]
     ]
 
-    print(hipporag.rag_qa(queries=queries,
+    print(foxhipporag.rag_qa(queries=queries,
                                   gold_docs=gold_docs,
                                   gold_answers=answers))
 

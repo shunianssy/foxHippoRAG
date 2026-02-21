@@ -106,7 +106,7 @@ class StandardRAG:
 
     def index(self, docs: List[str]):
         """
-        Indexes the given documents based on the HippoRAG 2 framework which generates an OpenIE knowledge graph
+        Indexes the given documents based on the foxHippoRAG framework which generates an OpenIE knowledge graph
         based on the given documents and encodes passages, entities and facts separately for later retrieval.
 
         Parameters:
