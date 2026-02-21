@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import List, Optional
+import os
 
 import numpy as np
 import torch
@@ -31,7 +32,10 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             f"Initializing {self.__class__.__name__}'s embedding model with params: {self.embedding_config.model_init_params}")
 
         if self.global_config.azure_embedding_endpoint is None:
+            # 使用embedding_api_key，如果没有则使用环境变量OPENAI_API_KEY
+            api_key = self.global_config.embedding_api_key or os.getenv("OPENAI_API_KEY")
             self.client = OpenAI(
+                api_key=api_key,
                 base_url=self.global_config.embedding_base_url
             )
         else:

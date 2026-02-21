@@ -27,4 +27,12 @@ def _get_embedding_model_class(embedding_model_name: str = "nvidia/NV-Embed-v2")
         return TransformersEmbeddingModel
     elif embedding_model_name.startswith("VLLM/"):
         return VLLMEmbeddingModel
-    assert False, f"Unknown embedding model name: {embedding_model_name}"
+    # 支持更多OpenAI兼容的嵌入模型
+    elif "bge" in embedding_model_name.lower():
+        return OpenAIEmbeddingModel
+    elif "embedding" in embedding_model_name.lower():
+        return OpenAIEmbeddingModel
+    # 默认使用OpenAI兼容模式（大多数API都兼容）
+    else:
+        logger.warning(f"Unknown embedding model name: {embedding_model_name}, using OpenAI compatible mode")
+        return OpenAIEmbeddingModel

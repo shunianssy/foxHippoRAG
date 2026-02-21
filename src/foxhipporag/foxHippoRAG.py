@@ -21,8 +21,22 @@ from .llm import _get_llm_class, BaseLLM
 from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
 from .embedding_store import EmbeddingStore
 from .information_extraction import OpenIE
-from .information_extraction.openie_vllm_offline import VLLMOfflineOpenIE
-from .information_extraction.openie_transformers_offline import TransformersOfflineOpenIE
+
+# vllm在Windows上不支持，使用条件导入
+try:
+    from .information_extraction.openie_vllm_offline import VLLMOfflineOpenIE
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLMOfflineOpenIE = None
+    VLLM_AVAILABLE = False
+
+try:
+    from .information_extraction.openie_transformers_offline import TransformersOfflineOpenIE
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TransformersOfflineOpenIE = None
+    TRANSFORMERS_AVAILABLE = False
+
 from .evaluation.retrieval_eval import RetrievalRecall
 from .evaluation.qa_eval import QAExactMatch, QAF1Score
 from .prompts.linking import get_query_instruction
@@ -127,8 +141,12 @@ class foxHippoRAG:
         if self.global_config.openie_mode == 'online':
             self.openie = OpenIE(llm_model=self.llm_model)
         elif self.global_config.openie_mode == 'offline':
+            if not VLLM_AVAILABLE:
+                raise ImportError("vllm在Windows上不支持，请使用openie_mode='online'")
             self.openie = VLLMOfflineOpenIE(self.global_config)
-        elif self.global_config.openie_mode ==  'Transformers-offline':
+        elif self.global_config.openie_mode == 'Transformers-offline':
+            if not TRANSFORMERS_AVAILABLE:
+                raise ImportError("Transformers离线模式不可用，请使用openie_mode='online'")
             self.openie = TransformersOfflineOpenIE(self.global_config)
 
         self.graph = self.initialize_graph()

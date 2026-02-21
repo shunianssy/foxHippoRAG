@@ -29,12 +29,12 @@ class DSPyFilter:
         model_name : The name of the language model as specified in the global configuration.
         default_gen_kwargs : A dictionary for storing the default generation keyword arguments.
         """
-        dspy_file_path = hipporag.global_config.rerank_dspy_file_path
+        dspy_file_path = foxhipporag.global_config.rerank_dspy_file_path
         self.one_input_template = """[[ ## question ## ]]\n{question}\n\n[[ ## fact_before_filter ## ]]\n{fact_before_filter}\n\nRespond with the corresponding output fields, starting with the field `[[ ## fact_after_filter ## ]]` (must be formatted as a valid Python Fact), and then ending with the marker for `[[ ## completed ## ]]`."""
         self.one_output_template = """[[ ## fact_after_filter ## ]]\n{fact_after_filter}\n\n[[ ## completed ## ]]"""
         self.message_template = self.make_template(dspy_file_path)
-        self.llm_infer_fn = hipporag.llm_model.infer
-        self.model_name = hipporag.global_config.llm_name
+        self.llm_infer_fn = foxhipporag.llm_model.infer
+        self.model_name = foxhipporag.global_config.llm_name
         self.default_gen_kwargs = {}
 
     def make_template(self, dspy_file_path):
