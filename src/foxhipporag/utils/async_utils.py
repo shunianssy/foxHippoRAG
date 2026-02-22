@@ -23,12 +23,10 @@ import os
 import sqlite3
 import time
 import logging
-import threading
 from typing import Any, Dict, List, Optional, Tuple, Callable, TypeVar, ParamSpec, TYPE_CHECKING, Awaitable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import wraps
 from collections import OrderedDict
-from pathlib import Path
 
 # 延迟导入重型库以提高启动速度
 _aiohttp = None
@@ -53,7 +51,6 @@ def _get_numpy():
 # 类型检查时导入（不影响运行时性能）
 if TYPE_CHECKING:
     import aiohttp
-    import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -681,7 +678,7 @@ class AsyncCircuitBreaker:
                     self._state = 'closed'
                 self._failure_count = 0
             return result
-        except self.expected_exception as e:
+        except self.expected_exception:
             async with self._lock:
                 self._failure_count += 1
                 self._last_failure_time = time.monotonic()

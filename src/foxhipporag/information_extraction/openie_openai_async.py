@@ -29,7 +29,6 @@ from ..utils.async_utils import (
     AsyncCircuitBreaker,
     async_retry,
     async_timeout,
-    gather_with_concurrency,
     global_async_monitor
 )
 from ..utils.misc_utils import TripleRawOutput, NerRawOutput
