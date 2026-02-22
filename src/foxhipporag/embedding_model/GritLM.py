@@ -11,7 +11,7 @@ from ..utils.config_utils import BaseConfig
 from ..utils.logging_utils import get_logger
 from ..utils.llm_utils import TextChatMessage
 
-from .base import BaseEmbeddingModel, EmbeddingConfig, make_cache_embed
+from .base import BaseEmbeddingModel, EmbeddingConfig
 
 
 logger = get_logger(__name__)
@@ -69,10 +69,12 @@ class GritLMEmbeddingModel(BaseEmbeddingModel):
     
     
     def batch_encode(self, texts: List[str], **kwargs) -> None:
-        if isinstance(texts, str): texts = [texts]
-        
+        if isinstance(texts, str):
+            texts = [texts]
+
         params = deepcopy(self.embedding_config.encode_params)
-        if kwargs: params.update(kwargs)
+        if kwargs:
+            params.update(kwargs)
         if "instruction" in kwargs:
             params["instruction"] = self._get_formated_instruction(params["instruction"])
         params["sentences"] = texts

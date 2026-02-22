@@ -1,13 +1,13 @@
-from typing import Tuple, List
+from typing import List
 import torch.cuda
+from transformers import PreTrainedTokenizer
+from vllm import SamplingParams, LLM
 
-from .base import BaseLLM, LLMConfig
+from .base import LLMConfig
 from ..utils.llm_utils import TextChatMessage, PROMPT_JSON_TEMPLATE
 from ..utils.logging_utils import get_logger
 
 logger = get_logger(__name__)
-
-from transformers import PreTrainedTokenizer
 
 def convert_text_chat_messages_to_strings(messages: List[TextChatMessage], tokenizer: PreTrainedTokenizer, add_assistant_header=True) -> List[str]:
     return tokenizer.apply_chat_template(conversation=messages, tokenize=False)
@@ -24,7 +24,8 @@ def convert_text_chat_messages_to_input_ids(messages: List[TextChatMessage], tok
     )
     encoded = tokenizer(prompt, add_special_tokens=False)
     return encoded['input_ids']
-from vllm import SamplingParams, LLM
+
+
 class VLLMOffline:
 
     def _init_llm_config(self) -> None:
@@ -34,7 +35,6 @@ class VLLMOffline:
         model_name = kwargs.get('model_name', global_config.llm_name)
         if model_name is None:
             model_name = 'meta-llama/Llama-3.3-70B-Instruct'
-        from vllm import LLM
         pipeline_parallel_size = 1
         tensor_parallel_size = kwargs.get('num_gpus', torch.cuda.device_count())
         if '8B' in model_name:

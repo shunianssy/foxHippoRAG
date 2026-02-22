@@ -9,6 +9,18 @@ from .VLLM import VLLMEmbeddingModel
 
 from ..utils.logging_utils import get_logger
 
+__all__ = [
+    "ContrieverModel",
+    "EmbeddingConfig",
+    "BaseEmbeddingModel",
+    "GritLMEmbeddingModel",
+    "NVEmbedV2EmbeddingModel",
+    "OpenAIEmbeddingModel",
+    "CohereEmbeddingModel",
+    "TransformersEmbeddingModel",
+    "VLLMEmbeddingModel",
+]
+
 logger = get_logger(__name__)
 
 

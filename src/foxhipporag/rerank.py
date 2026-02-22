@@ -1,9 +1,8 @@
 import json
 import difflib
 from pydantic import BaseModel, Field, TypeAdapter
-from openai import OpenAI
 from copy import deepcopy
-from typing import Union, Optional, List, Dict, Any, Tuple, Literal
+from typing import List, Tuple
 import re
 import ast
 from .prompts.filter_default_prompt import best_dspy_prompt

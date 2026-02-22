@@ -15,16 +15,15 @@
 """
 
 import numpy as np
-from tqdm import tqdm
 import os
-from typing import Union, Optional, List, Dict, Set, Any, Tuple, Literal
+from typing import Optional, List, Dict, Any, Tuple
 import logging
 from copy import deepcopy
 import pandas as pd
 import threading
 import time
 
-from .utils.misc_utils import compute_mdhash_id, NerRawOutput, TripleRawOutput
+from .utils.misc_utils import compute_mdhash_id
 from .vector_db import get_vector_db, BaseVectorDB
 
 logger = logging.getLogger(__name__)
@@ -350,7 +349,7 @@ class EmbeddingStore:
             self._pending_changes += len(hash_ids)
             
             # 立即保存（可以改为增量保存）
-            logger.info(f"Saving new records.")
+            logger.info("Saving new records.")
             self._save_data()
 
     def delete(self, hash_ids):
@@ -375,7 +374,7 @@ class EmbeddingStore:
                     self.texts.pop(idx)
                     self.embeddings.pop(idx)
 
-                logger.info(f"Saving record after deletion.")
+                logger.info("Saving record after deletion.")
                 self._save_data()
             else:
                 # 使用向量数据库后端

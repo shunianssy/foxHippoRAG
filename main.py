@@ -41,6 +41,18 @@ def get_gold_docs(samples: List, dataset_name: str = None) -> List:
 
 
 def get_gold_answers(samples):
+    """
+    从样本中提取 Golden Answers
+    
+    修复了 obj 分支中 possible_answers 和 o_aliases 可能是列表类型导致的 TypeError 漏洞。
+    当这些字段是列表时，需要展开其中的元素而不是将整个列表作为单个元素。
+    
+    Args:
+        samples: 样本列表
+        
+    Returns:
+        gold_answers: Golden Answers 集合列表
+    """
     gold_answers = []
     for sample_idx in range(len(samples)):
         gold_ans = None
@@ -51,13 +63,38 @@ def get_gold_answers(samples):
         elif 'reference' in sample:
             gold_ans = sample['reference']
         elif 'obj' in sample:
-            gold_ans = set(
-                [sample['obj']] + [sample['possible_answers']] + [sample['o_wiki_title']] + [sample['o_aliases']])
-            gold_ans = list(gold_ans)
-        assert gold_ans is not None
+            # 修复漏洞：正确处理 possible_answers 和 o_aliases 可能是列表的情况
+            # 原代码错误地将列表作为整体放入集合，导致 TypeError: unhashable type: 'list'
+            possible_answers = sample.get('possible_answers', [])
+            o_aliases = sample.get('o_aliases', [])
+            
+            # 确保 possible_answers 是列表形式
+            if possible_answers is None:
+                possible_answers = []
+            elif isinstance(possible_answers, str):
+                possible_answers = [possible_answers]
+            # 如果已经是列表，保持不变
+            
+            # 确保 o_aliases 是列表形式
+            if o_aliases is None:
+                o_aliases = []
+            elif isinstance(o_aliases, str):
+                o_aliases = [o_aliases]
+            # 如果已经是列表，保持不变
+            
+            # 构建 gold_ans 列表，正确展开所有元素
+            gold_ans_list = [sample['obj']]
+            gold_ans_list.extend(possible_answers)
+            gold_ans_list.append(sample.get('o_wiki_title', ''))
+            gold_ans_list.extend(o_aliases)
+            
+            # 过滤掉空字符串和 None 值
+            gold_ans = [ans for ans in gold_ans_list if ans]
+            
+        assert gold_ans is not None, f"Sample {sample_idx} has no valid answer field"
         if isinstance(gold_ans, str):
             gold_ans = [gold_ans]
-        assert isinstance(gold_ans, list)
+        assert isinstance(gold_ans, list), f"gold_ans should be a list, got {type(gold_ans)}"
         gold_ans = set(gold_ans)
         if 'answer_aliases' in sample:
             gold_ans.update(sample['answer_aliases'])

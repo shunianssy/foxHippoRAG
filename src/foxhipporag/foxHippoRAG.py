@@ -1,19 +1,12 @@
 import json
 import os
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
-from typing import Union, Optional, List, Set, Dict, Any, Tuple, Literal
+from dataclasses import asdict
+from typing import List, Set, Dict, Tuple
 import numpy as np
-import importlib
 from collections import defaultdict
-from transformers import HfArgumentParser
-from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
-from igraph import Graph
 import igraph as ig
-import numpy as np
-from collections import defaultdict
 import re
 import time
 
@@ -42,11 +35,25 @@ from .evaluation.qa_eval import QAExactMatch, QAF1Score
 from .prompts.linking import get_query_instruction
 from .prompts.prompt_template_manager import PromptTemplateManager
 from .rerank import DSPyFilter
-from .utils.misc_utils import *
-from .utils.misc_utils import NerRawOutput, TripleRawOutput
+from .utils.misc_utils import (
+    NerRawOutput,
+    TripleRawOutput,
+    QuerySolution,
+    text_processing,
+    reformat_openie_results,
+    flatten_facts,
+    min_max_normalize,
+    compute_mdhash_id,
+    extract_entity_nodes,
+)
 from .utils.embed_utils import retrieve_knn
-from .utils.typing import Triple
 from .utils.config_utils import BaseConfig
+from .retrieval.passage_density import (
+    PassageDensityConfig,
+    PassageDensityEvaluator,
+    EvidenceQualityScorer,
+    AdaptiveWeightFusion,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +193,45 @@ class foxHippoRAG:
         self.all_retrieval_time = 0
 
         self.ent_node_to_chunk_ids = None
+        
+        # 初始化证据质量评估和自适应权重融合组件
+        # 用于解决三重相似性权重过高导致检索证据不足段落的问题
+        self._init_evidence_quality_components()
+
+    def _init_evidence_quality_components(self):
+        """
+        初始化证据质量评估和自适应权重融合组件
+        
+        这些组件用于解决三重相似性权重过高导致检索证据不足段落的问题：
+        1. PassageDensityEvaluator: 评估段落信息密度
+        2. EvidenceQualityScorer: 评估证据质量
+        3. AdaptiveWeightFusion: 自适应权重融合
+        """
+        # 创建密度评估配置
+        density_config = PassageDensityConfig(
+            entity_count_weight=getattr(self.global_config, 'entity_count_weight', 0.3),
+            fact_count_weight=getattr(self.global_config, 'fact_count_weight', 0.3),
+            text_length_weight=getattr(self.global_config, 'text_length_weight', 0.2),
+            content_richness_weight=getattr(self.global_config, 'content_richness_weight', 0.2),
+            min_passage_weight=getattr(self.global_config, 'min_passage_weight', 0.1),
+            max_passage_weight=getattr(self.global_config, 'max_passage_weight', 0.5),
+            default_passage_weight=getattr(self.global_config, 'default_passage_weight', 0.2),
+            low_density_threshold=getattr(self.global_config, 'low_density_threshold', 0.3),
+            high_density_threshold=getattr(self.global_config, 'high_density_threshold', 0.7),
+            enable_adaptive_weight=getattr(self.global_config, 'enable_adaptive_weight_fusion', True),
+            dpr_fallback_threshold=getattr(self.global_config, 'dpr_fallback_threshold', 0.4),
+        )
+        
+        # 初始化组件
+        self.density_evaluator = PassageDensityEvaluator(density_config)
+        self.evidence_scorer = EvidenceQualityScorer(self.density_evaluator, density_config)
+        self.weight_fusion = AdaptiveWeightFusion(density_config)
+        
+        # 存储配置以便后续使用
+        self.density_config = density_config
+        
+        logger.info("Evidence quality components initialized with adaptive_weight=%s, default_passage_weight=%.2f",
+                    density_config.enable_adaptive_weight, density_config.default_passage_weight)
 
 
     def initialize_graph(self):
@@ -204,7 +250,7 @@ class foxHippoRAG:
             None
         """
         self._graph_pickle_filename = os.path.join(
-            self.working_dir, f"graph.pickle"
+            self.working_dir, "graph.pickle"
         )
 
         preloaded_graph = None
@@ -222,8 +268,8 @@ class foxHippoRAG:
             return preloaded_graph
 
     def pre_openie(self,  docs: List[str]):
-        logger.info(f"Indexing Documents")
-        logger.info(f"Performing OpenIE Offline")
+        logger.info("Indexing Documents")
+        logger.info("Performing OpenIE Offline")
 
         chunks = self.chunk_embedding_store.get_missing_string_hash_ids(docs)
 
@@ -249,9 +295,9 @@ class foxHippoRAG:
                 A list of documents to be indexed.
         """
 
-        logger.info(f"Indexing Documents")
+        logger.info("Indexing Documents")
 
-        logger.info(f"Performing OpenIE")
+        logger.info("Performing OpenIE")
 
         if self.global_config.openie_mode == 'offline':
             self.pre_openie(docs)
@@ -280,13 +326,13 @@ class foxHippoRAG:
         entity_nodes, chunk_triple_entities = extract_entity_nodes(chunk_triples)
         facts = flatten_facts(chunk_triples)
 
-        logger.info(f"Encoding Entities")
+        logger.info("Encoding Entities")
         self.entity_embedding_store.insert_strings(entity_nodes)
 
-        logger.info(f"Encoding Facts")
+        logger.info("Encoding Facts")
         self.fact_embedding_store.insert_strings([str(fact) for fact in facts])
 
-        logger.info(f"Constructing Graph")
+        logger.info("Constructing Graph")
 
         self.node_to_node_stats = {}
         self.ent_node_to_chunk_ids = {}
@@ -348,6 +394,10 @@ class foxHippoRAG:
 
             if len(non_deleted_docs) == 0:
                 true_triples_to_delete.append(triple)
+            else:
+                # 更新 proc_triples_to_docs，移除已删除的文档 ID
+                # 这确保后续删除操作时数据一致性
+                self.proc_triples_to_docs[str(proc_triple)] = non_deleted_docs
 
         processed_true_triples_to_delete = [[text_processing(list(triple)) for triple in true_triples_to_delete]]
         entities_to_delete, _ = extract_entity_nodes(processed_true_triples_to_delete)
@@ -367,6 +417,10 @@ class foxHippoRAG:
 
             if len(non_deleted_docs) == 0:
                 filtered_ent_ids_to_delete.append(ent_node)
+            else:
+                # 更新 ent_node_to_chunk_ids，移除已删除的文档 ID
+                # 这确保后续删除操作时数据一致性
+                self.ent_node_to_chunk_ids[ent_node] = non_deleted_docs
 
         logger.info(f"Deleting {len(chunk_ids_to_delete)} Chunks")
         logger.info(f"Deleting {len(triple_ids_to_delete)} Triples")
@@ -864,12 +918,14 @@ class foxHippoRAG:
             Does not explicitly raise exceptions within the provided function logic.
         """
 
-        if "name" in self.graph.vs:
+        # 获取当前图中已有的节点
+        # 使用 attribute_names() 方法检查属性是否存在，这是 igraph 的正确用法
+        if "name" in self.graph.vs.attribute_names():
             current_graph_nodes = set(self.graph.vs["name"])
         else:
             current_graph_nodes = set()
 
-        logger.info(f"Adding OpenIE triples to graph.")
+        logger.info("Adding OpenIE triples to graph.")
 
         for chunk_key, triples in tqdm(zip(chunk_ids, chunk_triples)):
             entities_in_chunk = set()
@@ -922,7 +978,7 @@ class foxHippoRAG:
 
         num_new_chunks = 0
 
-        logger.info(f"Connecting passage nodes to phrase nodes.")
+        logger.info("Connecting passage nodes to phrase nodes.")
 
         for idx, chunk_key in tqdm(enumerate(chunk_ids)):
 
@@ -953,7 +1009,7 @@ class foxHippoRAG:
             node_to_node_stats: dict. Stores scores for edges between nodes representing their relationship.
 
         """
-        logger.info(f"Expanding graph with synonymy edges")
+        logger.info("Expanding graph with synonymy edges")
 
         self.entity_id_to_row = self.entity_embedding_store.get_all_id_to_rows()
         entity_node_keys = list(self.entity_id_to_row.keys())
@@ -1134,7 +1190,7 @@ class foxHippoRAG:
         self.add_new_nodes()
         self.add_new_edges()
 
-        logger.info(f"Graph construction completed!")
+        logger.info("Graph construction completed!")
         print(self.get_graph_info())
 
     def add_new_nodes(self):
@@ -1171,6 +1227,10 @@ class foxHippoRAG:
         """
         Processes edges from `node_to_node_stats` to add them into a graph object while
         managing adjacency lists, validating edges, and logging invalid edge cases.
+        
+        Note: This method includes deduplication logic to prevent duplicate edges.
+        Since add_fact_edges adds bidirectional edges (A->B and B->A) to node_to_node_stats,
+        we need to track seen edges to avoid adding the same edge twice to the graph.
         """
 
         graph_adj_list = defaultdict(dict)
@@ -1178,8 +1238,23 @@ class foxHippoRAG:
         edge_source_node_keys = []
         edge_target_node_keys = []
         edge_metadata = []
+        
+        # 使用集合跟踪已处理的边，避免重复添加
+        # 由于 node_to_node_stats 包含双向边 (A->B 和 B->A)，需要去重
+        seen_edges = set()
+        
         for edge, weight in self.node_to_node_stats.items():
-            if edge[0] == edge[1]: continue
+            if edge[0] == edge[1]:
+                continue
+            
+            # 创建边的唯一标识（使用有序元组来识别同一条无向边）
+            edge_key = (edge[0], edge[1])
+            
+            # 如果这条边已经处理过，跳过
+            if edge_key in seen_edges:
+                continue
+            seen_edges.add(edge_key)
+            
             graph_adj_list[edge[0]][edge[1]] = weight
             graph_inverse_adj_list[edge[1]][edge[0]] = weight
 
@@ -1208,7 +1283,7 @@ class foxHippoRAG:
             f"Writing graph with {len(self.graph.vs())} nodes, {len(self.graph.es())} edges"
         )
         self.graph.write_pickle(self._graph_pickle_filename)
-        logger.info(f"Saving graph completed!")
+        logger.info("Saving graph completed!")
 
     def get_graph_info(self) -> Dict:
         """
@@ -1532,6 +1607,11 @@ class foxHippoRAG:
         Computes document scores based on fact-based similarity and relevance using personalized
         PageRank (PPR) and dense retrieval models. This function combines the signal from the relevant
         facts identified with passage similarity and graph-based search for enhanced result ranking.
+        
+        增强功能：
+        1. 自适应段落权重：根据事实得分和段落密度动态调整权重
+        2. 证据质量评分：优先选择证据充足的段落
+        3. DPR 回退机制：当图谱检索效果不佳时回退到 DPR
 
         Parameters:
             query (str): The input query string for which similarity and relevance computations
@@ -1552,6 +1632,38 @@ class foxHippoRAG:
                 - The second array consists of the PPR scores associated with the sorted document IDs.
         """
 
+        # 计算平均事实得分，用于自适应权重调整
+        avg_fact_score = 0.0
+        if len(top_k_fact_indices) > 0 and query_fact_scores.ndim > 0:
+            relevant_scores = [query_fact_scores[idx] for idx in top_k_fact_indices if idx < len(query_fact_scores)]
+            if relevant_scores:
+                avg_fact_score = float(np.mean(relevant_scores))
+        
+        # 检查是否启用自适应权重融合
+        enable_adaptive = getattr(self.global_config, 'enable_adaptive_weight_fusion', True)
+        enable_evidence_scoring = getattr(self.global_config, 'enable_evidence_quality_scoring', True)
+        
+        # 计算自适应段落权重
+        if enable_adaptive and hasattr(self, 'weight_fusion'):
+            # 获取图谱覆盖率（实体在图谱中的比例）
+            graph_coverage = len([f for f in top_k_facts if f]) / max(len(top_k_facts), 1)
+            
+            # 检查是否应该回退到 DPR
+            if self.weight_fusion.should_fallback_to_dpr(
+                len(top_k_facts), avg_fact_score, graph_coverage
+            ):
+                logger.debug(f"Falling back to DPR: avg_fact_score={avg_fact_score:.3f}, coverage={graph_coverage:.3f}")
+                return self.dense_passage_retrieval(query)
+            
+            # 计算自适应段落权重
+            adaptive_weight = self.weight_fusion.compute_adaptive_passage_weight(
+                avg_fact_score=avg_fact_score,
+                avg_density_score=0.5,  # 默认值，后续会更新
+                query_complexity=0.5
+            )
+            passage_node_weight = adaptive_weight
+            logger.debug(f"Using adaptive passage weight: {passage_node_weight:.3f}")
+
         #Assigning phrase weights based on selected facts from previous steps.
         linking_score_map = {}  # from phrase to the average scores of the facts that contain the phrase
         phrase_scores = {}  # store all fact scores for each phrase regardless of whether they exist in the knowledge graph or not
@@ -1563,7 +1675,7 @@ class foxHippoRAG:
 
         for rank, f in enumerate(top_k_facts):
             subject_phrase = f[0].lower()
-            predicate_phrase = f[1].lower()
+            f[1].lower()
             object_phrase = f[2].lower()
             fact_score = query_fact_scores[
                 top_k_fact_indices[rank]] if query_fact_scores.ndim > 0 else query_fact_scores
@@ -1583,10 +1695,11 @@ class foxHippoRAG:
 
                     phrase_weights[phrase_id] += weighted_fact_score
                     number_of_occurs[phrase_id] += 1
+                    phrases_and_ids.add((phrase, phrase_id))
 
-                phrases_and_ids.add((phrase, phrase_id))
-
-        phrase_weights /= number_of_occurs
+        # 避免除以零的警告：只对出现过至少一次的 phrase 进行除法操作
+        valid_mask = number_of_occurs > 0
+        phrase_weights[valid_mask] /= number_of_occurs[valid_mask]
 
         for phrase, phrase_id in phrases_and_ids:
             if phrase not in phrase_scores:
@@ -1633,8 +1746,79 @@ class foxHippoRAG:
 
         assert len(ppr_sorted_doc_ids) == len(
             self.passage_node_idxs), f"Doc prob length {len(ppr_sorted_doc_ids)} != corpus length {len(self.passage_node_idxs)}"
+        
+        # 证据质量评分重排序
+        if enable_evidence_scoring and hasattr(self, 'evidence_scorer'):
+            ppr_sorted_doc_ids, ppr_sorted_doc_scores = self._rerank_by_evidence_quality(
+                ppr_sorted_doc_ids, ppr_sorted_doc_scores, query
+            )
 
         return ppr_sorted_doc_ids, ppr_sorted_doc_scores
+    
+    def _rerank_by_evidence_quality(self,
+                                    doc_ids: np.ndarray,
+                                    doc_scores: np.ndarray,
+                                    query: str,
+                                    top_k: int = 100) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        根据证据质量对检索结果进行重排序
+        
+        Args:
+            doc_ids: 文档ID数组
+            doc_scores: 文档得分数组
+            query: 查询字符串
+            top_k: 重排序的文档数量
+            
+        Returns:
+            重排序后的文档ID和得分
+        """
+        # 只对 top_k 个文档进行重排序
+        rerank_count = min(top_k, len(doc_ids))
+        
+        # 获取文档文本
+        passage_ids = []
+        passage_texts = []
+        for idx in doc_ids[:rerank_count]:
+            passage_key = self.passage_node_keys[idx]
+            passage_ids.append(passage_key)
+            row = self.chunk_embedding_store.get_row(passage_key)
+            passage_texts.append(row.get("content", "") if row else "")
+        
+        if not passage_texts:
+            return doc_ids, doc_scores
+        
+        # 归一化得分
+        normalized_scores = min_max_normalize(doc_scores[:rerank_count])
+        
+        # 根据证据质量重排序
+        try:
+            sorted_indices, evidence_scores = self.evidence_scorer.rank_by_evidence_quality(
+                passage_ids=passage_ids,
+                passage_texts=passage_texts,
+                semantic_scores=normalized_scores,
+                query_type='general'
+            )
+            
+            # 创建新的排序结果
+            new_doc_ids = np.zeros(len(doc_ids), dtype=doc_ids.dtype)
+            new_doc_scores = np.zeros(len(doc_scores), dtype=doc_scores.dtype)
+            
+            # 重排序的文档
+            for i, idx in enumerate(sorted_indices):
+                new_doc_ids[i] = doc_ids[idx]
+                new_doc_scores[i] = evidence_scores[i]
+            
+            # 未重排序的文档保持原顺序
+            remaining_count = len(doc_ids) - rerank_count
+            if remaining_count > 0:
+                new_doc_ids[rerank_count:] = doc_ids[rerank_count:]
+                new_doc_scores[rerank_count:] = doc_scores[rerank_count:]
+            
+            return new_doc_ids, new_doc_scores
+            
+        except Exception as e:
+            logger.warning(f"Error in evidence quality reranking: {e}")
+            return doc_ids, doc_scores
 
 
     def rerank_facts(self, query: str, query_fact_scores: np.ndarray) -> Tuple[List[int], List[Tuple], dict]:
@@ -1712,7 +1896,8 @@ class foxHippoRAG:
                 in the same order.
         """
 
-        if damping is None: damping = 0.5 # for potential compatibility
+        if damping is None:
+            damping = 0.5  # for potential compatibility
         reset_prob = np.where(np.isnan(reset_prob) | (reset_prob < 0), 0, reset_prob)
         pagerank_scores = self.graph.personalized_pagerank(
             vertices=range(len(self.node_name_to_vertex_idx)),

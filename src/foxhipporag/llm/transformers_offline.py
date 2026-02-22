@@ -1,16 +1,14 @@
-from typing import Tuple, List
+from typing import List
 import torch.cuda
 import outlines.generate as generate
 import outlines.models as models
-import json
+from transformers import PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
 
-from .base import BaseLLM, LLMConfig
+from .base import LLMConfig
 from ..utils.llm_utils import TextChatMessage, get_pydantic_model
 from ..utils.logging_utils import get_logger
 
 logger = get_logger(__name__)
-
-from transformers import PreTrainedTokenizer, AutoModelForCausalLM, AutoTokenizer
 
 def convert_text_chat_messages_to_strings(messages: List[TextChatMessage], tokenizer: PreTrainedTokenizer, add_assistant_header=True) -> List[str]:
     return tokenizer.apply_chat_template(conversation=messages, tokenize=False)
@@ -27,7 +25,6 @@ def convert_text_chat_messages_to_input_string(messages: List[TextChatMessage], 
     )
     return prompt
 
-from vllm import SamplingParams
 class TransformersOffline:
 
     def _init_llm_config(self) -> None:
@@ -69,7 +66,6 @@ class TransformersOffline:
 
         all_prompt_texts = [convert_text_chat_messages_to_input_string(messages, self.tokenizer) for messages in messages_list]
 
-        guided = None
         if json_template is not None:
             guided_json=get_pydantic_model(json_template)
             outlines_model = models.Transformers(self.model, self.tokenizer)

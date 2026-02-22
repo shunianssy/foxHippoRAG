@@ -8,6 +8,7 @@ from .base import BaseLLM
 from .bedrock_llm import BedrockLLM
 from .transformers_llm import TransformersLLM
 
+__all__ = ["CacheOpenAI", "BaseLLM", "BedrockLLM", "TransformersLLM"]
 
 logger = get_logger(__name__)
 
@@ -23,4 +24,3 @@ def _get_llm_class(config: BaseConfig):
         return TransformersLLM(config)
     
     return CacheOpenAI.from_experiment_config(config)
-    

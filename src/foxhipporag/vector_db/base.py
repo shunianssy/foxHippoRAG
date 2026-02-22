@@ -5,7 +5,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import logging
 

@@ -266,6 +266,56 @@ class BaseConfig:
         metadata={"help": "Damping factor for ppr algorithm."}
     )
     
+    # Evidence quality and density evaluation attributes
+    # 用于解决三重相似性权重过高导致检索证据不足段落的问题
+    enable_evidence_quality_scoring: bool = field(
+        default=True,
+        metadata={"help": "Enable evidence quality scoring to prioritize passages with sufficient evidence."}
+    )
+    enable_adaptive_weight_fusion: bool = field(
+        default=True,
+        metadata={"help": "Enable adaptive weight fusion between DPR and graph retrieval."}
+    )
+    min_passage_weight: float = field(
+        default=0.1,
+        metadata={"help": "Minimum passage weight in PPR. Prevents over-reliance on graph propagation."}
+    )
+    max_passage_weight: float = field(
+        default=0.5,
+        metadata={"help": "Maximum passage weight in PPR."}
+    )
+    default_passage_weight: float = field(
+        default=0.2,
+        metadata={"help": "Default passage weight in PPR. Increased from 0.05 to balance DPR and graph signals."}
+    )
+    dpr_fallback_threshold: float = field(
+        default=0.4,
+        metadata={"help": "Threshold for falling back to pure DPR when graph retrieval quality is low."}
+    )
+    low_density_threshold: float = field(
+        default=0.3,
+        metadata={"help": "Threshold below which a passage is considered low-density (evidence insufficient)."}
+    )
+    high_density_threshold: float = field(
+        default=0.7,
+        metadata={"help": "Threshold above which a passage is considered high-density (evidence sufficient)."}
+    )
+    entity_count_weight: float = field(
+        default=0.3,
+        metadata={"help": "Weight for entity count in density calculation."}
+    )
+    fact_count_weight: float = field(
+        default=0.3,
+        metadata={"help": "Weight for fact count in density calculation."}
+    )
+    text_length_weight: float = field(
+        default=0.2,
+        metadata={"help": "Weight for text length in density calculation."}
+    )
+    content_richness_weight: float = field(
+        default=0.2,
+        metadata={"help": "Weight for content richness in density calculation."}
+    )
     
     # QA specific attributes
     max_qa_steps: int = field(
@@ -335,9 +385,11 @@ class BaseConfig:
     
     
     def __post_init__(self):
-        if self.save_dir is None: # If save_dir not given
-            if self.dataset is None: self.save_dir = 'outputs' # running freely
-            else: self.save_dir = os.path.join('outputs', self.dataset) # customize your dataset's output dir here
+        if self.save_dir is None:  # If save_dir not given
+            if self.dataset is None:
+                self.save_dir = 'outputs'  # running freely
+            else:
+                self.save_dir = os.path.join('outputs', self.dataset)  # customize your dataset's output dir here
         logger.debug(f"Initializing the highest level of save_dir to be {self.save_dir}")
         
         # 设置默认的向量数据库路径

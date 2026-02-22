@@ -1,15 +1,18 @@
 import json
+import hashlib
+import sqlite3
+import threading
+import multiprocessing
 from dataclasses import dataclass, field, asdict
 from typing import (
     Optional,
-    Tuple,
     Any, 
     Dict,
     List
 )
 import numpy as np
-import threading
-import multiprocessing
+import torch
+from filelock import FileLock
 
 
 from ..utils.logging_utils import get_logger
@@ -86,15 +89,15 @@ class EmbeddingConfig:
         return json.dumps(self._data)
     
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> "LLMConfig":
-        """Create an LLMConfig instance from a dictionary."""
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "EmbeddingConfig":
+        """Create an EmbeddingConfig instance from a dictionary."""
         instance = cls()
         instance.batch_upsert(config_dict)
         return instance
 
     @classmethod
-    def from_json(cls, json_str: str) -> "LLMConfig":
-        """Create an LLMConfig instance from a JSON string."""
+    def from_json(cls, json_str: str) -> "EmbeddingConfig":
+        """Create an EmbeddingConfig instance from a JSON string."""
         instance = cls()
         instance.batch_upsert(json.loads(json_str))
         return instance
@@ -102,13 +105,8 @@ class EmbeddingConfig:
     def __str__(self) -> str:
         """Provide a user-friendly string representation of the configuration."""
         return json.dumps(self._data, indent=4)
-    
 
-from filelock import FileLock
-import sqlite3
-import hashlib
-import os
-import torch
+
 def make_cache_embed(encode_func, cache_file_name, device):
     def wrapper(**kwargs):
         # FOCUS_KEYS = ["instruction", "prompts", "max_length"]
@@ -194,10 +192,11 @@ class BaseEmbeddingModel:
     embedding_dim: int # Need subclass to init
     
     def __init__(self, global_config: Optional[BaseConfig] = None) -> None:
-        if global_config is None: 
+        if global_config is None:
             logger.debug("global config is not given. Using the default ExperimentConfig instance.")
             self.global_config = BaseConfig()
-        else: self.global_config = global_config
+        else:
+            self.global_config = global_config
         logger.debug(f"Loading {self.__class__.__name__} with global_config: {asdict(self.global_config)}")
         
         

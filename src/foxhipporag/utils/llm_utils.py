@@ -200,7 +200,7 @@ def fix_broken_generated_json(json_str: str) -> str:
         # Try to load the JSON to see if it is valid
         json.loads(json_str)
         return json_str  # Return as-is if valid
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         pass
 
     # Step 1: Remove trailing content after the last comma.
@@ -244,7 +244,8 @@ def filter_invalid_triples(triples: List[List[str]]) -> List[List[str]]:
     valid_triples = []
 
     for triple in triples:
-        if len(triple) != 3: continue  # Skip triples that do not have exactly 3 elements
+        if len(triple) != 3:
+            continue  # Skip triples that do not have exactly 3 elements
 
         valid_triple = [str(item) for item in triple]
         if tuple(valid_triple) not in unique_triples:

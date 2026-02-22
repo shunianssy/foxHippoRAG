@@ -1,5 +1,4 @@
-from typing import List, Tuple, Dict, Any, Optional
-import numpy as np
+from typing import List, Tuple, Dict, Optional
 
 
 from .base import BaseMetric

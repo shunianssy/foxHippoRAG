@@ -1,35 +1,18 @@
-import json
 import os
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
-from typing import Union, Optional, List, Set, Dict, Any, Tuple, Literal
+from dataclasses import asdict
+from typing import List, Dict, Tuple
 import numpy as np
-import importlib
-from collections import defaultdict
-from transformers import HfArgumentParser
-from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
-from igraph import Graph
-import igraph as ig
-import numpy as np
-from collections import defaultdict
-import re
 import time
 
 from .llm import _get_llm_class, BaseLLM
 from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
 from .embedding_store import EmbeddingStore
-from .information_extraction import OpenIE
-from .information_extraction.openie_vllm_offline import VLLMOfflineOpenIE
 from .evaluation.retrieval_eval import RetrievalRecall
 from .evaluation.qa_eval import QAExactMatch, QAF1Score
 from .prompts.linking import get_query_instruction
-from .prompts.prompt_template_manager import PromptTemplateManager
-from .rerank import DSPyFilter
-from .utils.misc_utils import *
-from .utils.embed_utils import retrieve_knn
-from .utils.typing import Triple
+from .utils.misc_utils import QuerySolution, min_max_normalize
 from .utils.config_utils import BaseConfig
 
 logger = logging.getLogger(__name__)
@@ -91,9 +74,6 @@ class StandardRAG:
                 embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
                                                                               embedding_model_name=self.global_config.embedding_model_name)
 
-        import ipdb;
-        ipdb.set_trace()
-
         self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
                                                     os.path.join(self.working_dir, "chunk_embeddings"),
                                                     self.global_config.embedding_batch_size, 'chunk',
@@ -116,7 +96,7 @@ class StandardRAG:
                 A list of documents to be indexed.
         """
 
-        logger.info(f"Indexing Documents")
+        logger.info("Indexing Documents")
 
         self.chunk_embedding_store.insert_strings(docs)
 

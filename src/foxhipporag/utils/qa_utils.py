@@ -1,4 +1,3 @@
-from typing import Dict, List, Union, Any, Optional
 
 
 from ..prompts.prompt_template_manager import PromptTemplateManager
@@ -50,7 +49,7 @@ def reason_step(dataset, prompt_template_manager: PromptTemplateManager, query: 
     try:
         response_message, metadata = llm_client.infer(messages=messages)
         response_content = response_message[0]["content"]
-    except Exception as e:
+    except Exception:
         logger.exception("An exception occurred while calling LLM for QA!")
         return ''
     

@@ -8,7 +8,6 @@ FAISS 提供高效的向量检索能力，特别适合大规模向量搜索。
 import os
 import json
 import threading
-import time
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from copy import deepcopy

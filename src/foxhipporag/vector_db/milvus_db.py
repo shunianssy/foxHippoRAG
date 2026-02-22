@@ -7,9 +7,7 @@ Milvus 是一个开源的向量数据库，支持大规模向量检索。
 
 import logging
 import threading
-import time
 from typing import List, Dict, Any, Optional, Tuple
-from copy import deepcopy
 
 import numpy as np
 

@@ -19,7 +19,8 @@ def retrieve_knn(query_ids: List[str], key_ids: List[str], query_vecs, key_vecs,
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    if len(key_vecs) == 0: return {}
+    if len(key_vecs) == 0:
+        return {}
 
     query_vecs = torch.tensor(query_vecs, dtype=torch.float32)
     query_vecs = torch.nn.functional.normalize(query_vecs, dim=1)

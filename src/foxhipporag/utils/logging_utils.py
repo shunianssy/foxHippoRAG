@@ -1,4 +1,3 @@
-import os
 import logging
 
 # # Base directory for storing logs (if not specified through environment variable, set it to `logs` dir under project root)

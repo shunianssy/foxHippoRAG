@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Optional, Union, Callable
+from typing import List, Dict, Tuple, Optional, Callable
 from collections import Counter
 import numpy as np
 

@@ -1,19 +1,17 @@
 from copy import deepcopy
 from typing import List, Optional
 import os
-import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import torch
 from tqdm import tqdm
-from transformers import AutoModel
 from openai import OpenAI
 from openai import AzureOpenAI
 
 from ..utils.config_utils import BaseConfig
 from ..utils.logging_utils import get_logger
-from .base import BaseEmbeddingModel, EmbeddingConfig, make_cache_embed
+from .base import BaseEmbeddingModel, EmbeddingConfig
 
 logger = get_logger(__name__)
 
@@ -87,17 +85,25 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         self.embedding_config = EmbeddingConfig.from_dict(config_dict=config_dict)
         logger.debug(f"Init {self.__class__.__name__}'s embedding_config: {self.embedding_config}")
 
-    def encode(self, texts: List[str], max_retries: int = 3) -> np.ndarray:
+    def encode(self, texts: List[str], max_retries: int = 3, instruction: str = "") -> np.ndarray:
         """
         编码文本为嵌入向量，支持自动重试
         
         Args:
             texts: 文本列表
             max_retries: 最大重试次数
+            instruction: 编码指令（OpenAI 官方 API 不支持 instruction，此参数仅为接口一致性）
             
         Returns:
             嵌入向量数组
+            
+        Note:
+            OpenAI embedding API 不支持 instruction 前缀。
+            根据 OpenAI 官方文档，直接传入原始文本即可。
+            参考: https://platform.openai.com/docs/guides/embeddings
         """
+        # OpenAI embedding API 不支持 instruction，直接使用原始文本
+        # 这与其他模型（如 NVEmbedV2、GritLM）的行为不同
         texts = [t.replace("\n", " ") for t in texts]
         texts = [t if t != '' else ' ' for t in texts]
         
@@ -143,11 +149,14 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         if kwargs: 
             params.update(kwargs)
 
-        if "instruction" in kwargs:
-            if kwargs["instruction"] != '':
-                params["instruction"] = f"Instruct: {kwargs['instruction']}\nQuery: "
+        # OpenAI embedding API 不支持 instruction 前缀
+        # 忽略 instruction 参数，直接使用原始文本
+        # 这与 NVEmbedV2、GritLM 等模型的行为不同
+        instruction = params.pop("instruction", "")
+        if instruction:
+            logger.debug(f"OpenAI embedding API does not support instruction prefix, ignoring: {instruction[:50]}...")
 
-        logger.debug(f"Calling {self.__class__.__name__} with:\n{params}")
+        logger.debug(f"Calling {self.__class__.__name__} with {len(texts)} texts")
 
         batch_size = params.pop("batch_size", 16)
 

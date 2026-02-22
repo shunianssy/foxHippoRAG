@@ -1,12 +1,8 @@
-import re
-import json
-import numpy as np
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Any, Dict, List, Tuple, Union
+from dataclasses import asdict
+from typing import Optional, Dict, List, Tuple, Union
 
 from ..utils.logging_utils import get_logger
 from ..utils.config_utils import BaseConfig
-from ..utils.eval_utils import normalize_answer
 
 logger = get_logger(__name__)
 
@@ -20,7 +16,8 @@ class BaseMetric:
         if global_config is None:
             logger.debug("global config is not given. Using the default ExperimentConfig instance.")
             self.global_config = BaseConfig()
-        else: self.global_config = global_config
+        else:
+            self.global_config = global_config
         
         logger.debug(f"Loading {self.__class__.__name__} with global_config: {asdict(self.global_config)}")
         

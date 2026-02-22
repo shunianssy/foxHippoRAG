@@ -77,7 +77,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install build
           python -m build
-          pip install dist/*.whl --no-deps || pip install dist/foxHippoRAG-*.whl --no-deps
+          # 安装 wheel 并安装依赖
+          pip install dist/*.whl || pip install dist/foxHippoRAG-*.whl
 
       - name: 验证安装
         run: python -c "import foxhipporag; print('foxHippoRAG 导入成功')"
