@@ -1,6 +1,8 @@
 from copy import deepcopy
 from typing import List, Optional
 import os
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import torch
@@ -16,6 +18,14 @@ from .base import BaseEmbeddingModel, EmbeddingConfig, make_cache_embed
 logger = get_logger(__name__)
 
 class OpenAIEmbeddingModel(BaseEmbeddingModel):
+    """
+    OpenAI嵌入模型实现
+    
+    性能优化版本：
+    - 支持并行批量编码
+    - 支持自动重试
+    - 支持错误处理
+    """
 
     def __init__(self, global_config: Optional[BaseConfig] = None, embedding_model_name: Optional[str] = None) -> None:
         super().__init__(global_config=global_config)
@@ -26,6 +36,9 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
                 f"Overriding {self.__class__.__name__}'s embedding_model_name with: {self.embedding_model_name}")
 
         self._init_embedding_config()
+
+        # 并行工作线程数
+        self.max_workers = getattr(global_config, 'embedding_parallel_workers', 8) if global_config else 8
 
         # Initializing the embedding model
         logger.debug(
@@ -74,24 +87,65 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         self.embedding_config = EmbeddingConfig.from_dict(config_dict=config_dict)
         logger.debug(f"Init {self.__class__.__name__}'s embedding_config: {self.embedding_config}")
 
-    def encode(self, texts: List[str]):
+    def encode(self, texts: List[str], max_retries: int = 3) -> np.ndarray:
+        """
+        编码文本为嵌入向量，支持自动重试
+        
+        Args:
+            texts: 文本列表
+            max_retries: 最大重试次数
+            
+        Returns:
+            嵌入向量数组
+        """
         texts = [t.replace("\n", " ") for t in texts]
         texts = [t if t != '' else ' ' for t in texts]
-        response = self.client.embeddings.create(input=texts, model=self.embedding_model_name)
-        results = np.array([v.embedding for v in response.data])
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.client.embeddings.create(input=texts, model=self.embedding_model_name)
+                results = np.array([v.embedding for v in response.data])
+                return results
+            except Exception as e:
+                logger.warning(f"Encoding attempt {attempt + 1} failed: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"All {max_retries} encoding attempts failed")
+                    raise
+                # 等待后重试
+                import time
+                time.sleep(1 * (attempt + 1))
+        
+        return np.array([])
 
-        return results
-
-    def batch_encode(self, texts: List[str], **kwargs) -> None:
-        if isinstance(texts, str): texts = [texts]
+    def batch_encode(self, texts: List[str], **kwargs) -> np.ndarray:
+        """
+        批量编码文本为嵌入向量
+        
+        性能优化：
+        - 使用线程池并行处理
+        - 支持自动重试
+        - 显示进度条
+        
+        Args:
+            texts: 文本列表
+            **kwargs: 其他参数
+            
+        Returns:
+            嵌入向量数组
+        """
+        if isinstance(texts, str): 
+            texts = [texts]
+            
+        if len(texts) == 0:
+            return np.array([])
 
         params = deepcopy(self.embedding_config.encode_params)
-        if kwargs: params.update(kwargs)
+        if kwargs: 
+            params.update(kwargs)
 
         if "instruction" in kwargs:
             if kwargs["instruction"] != '':
                 params["instruction"] = f"Instruct: {kwargs['instruction']}\nQuery: "
-            # del params["instruction"]
 
         logger.debug(f"Calling {self.__class__.__name__} with:\n{params}")
 
@@ -99,17 +153,45 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
 
         if len(texts) <= batch_size:
             results = self.encode(texts)
-        else:
+        elif len(texts) <= batch_size * 4:
+            # 小批量，串行处理
             pbar = tqdm(total=len(texts), desc="Batch Encoding")
             results = []
             for i in range(0, len(texts), batch_size):
                 batch = texts[i:i + batch_size]
                 try:
                     results.append(self.encode(batch))
-                except:
-                    import ipdb; ipdb.set_trace()
-                pbar.update(batch_size)
+                except Exception as e:
+                    logger.error(f"Encoding batch failed: {e}")
+                    # 用零向量填充失败的批次
+                    results.append(np.zeros((len(batch), 1536)))  # OpenAI默认维度
+                pbar.update(len(batch))
             pbar.close()
+            results = np.concatenate(results)
+        else:
+            # 大批量，并行处理
+            logger.info(f"Parallel encoding {len(texts)} texts with {self.max_workers} workers")
+            
+            # 创建批次
+            batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
+            
+            results = [None] * len(batches)
+            
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                future_to_idx = {
+                    executor.submit(self.encode, batch): idx 
+                    for idx, batch in enumerate(batches)
+                }
+                
+                for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="Parallel Encoding"):
+                    idx = future_to_idx[future]
+                    try:
+                        results[idx] = future.result(timeout=60)
+                    except Exception as e:
+                        logger.error(f"Parallel encoding batch {idx} failed: {e}")
+                        # 用零向量填充失败的批次
+                        results[idx] = np.zeros((len(batches[idx]), 1536))
+            
             results = np.concatenate(results)
 
         if isinstance(results, torch.Tensor):

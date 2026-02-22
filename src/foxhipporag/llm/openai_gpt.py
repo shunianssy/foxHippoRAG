@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import hashlib
 import json
@@ -5,6 +6,7 @@ import os
 import sqlite3
 from copy import deepcopy
 from typing import List, Tuple
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import openai
@@ -22,6 +24,16 @@ from ..utils.logging_utils import get_logger
 from .base import BaseLLM, LLMConfig
 
 logger = get_logger(__name__)
+
+# 全局线程池，用于并行批量推理
+_batch_executor = None
+
+def _get_batch_executor(max_workers: int = 32):
+    """获取或创建全局线程池执行器"""
+    global _batch_executor
+    if _batch_executor is None:
+        _batch_executor = ThreadPoolExecutor(max_workers=max_workers)
+    return _batch_executor
 
 def cache_response(func):
     @functools.wraps(func)
@@ -195,5 +207,305 @@ class CacheOpenAI(BaseLLM):
         }
 
         return response_message, metadata
+
+    async def ainfer(
+        self,
+        messages: List[TextChatMessage],
+        **kwargs
+    ) -> Tuple[str, dict, bool]:
+        """
+        异步推理方法，使用asyncio进行非阻塞调用
+        
+        Args:
+            messages: 消息列表
+            **kwargs: 其他参数
+            
+        Returns:
+            Tuple[str, dict, bool]: (响应消息, 元数据, 是否缓存命中)
+        """
+        # 首先检查缓存
+        gen_params = getattr(self, "llm_config", {}).generate_params if hasattr(self, "llm_config") else {}
+        model = kwargs.get("model", gen_params.get("model"))
+        seed = kwargs.get("seed", gen_params.get("seed"))
+        temperature = kwargs.get("temperature", gen_params.get("temperature"))
+        
+        key_data = {
+            "messages": messages,
+            "model": model,
+            "seed": seed,
+            "temperature": temperature,
+        }
+        key_str = json.dumps(key_data, sort_keys=True, default=str)
+        key_hash = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+        
+        lock_file = self.cache_file_name + ".lock"
+        
+        # 尝试从缓存读取
+        with FileLock(lock_file):
+            conn = sqlite3.connect(self.cache_file_name)
+            c = conn.cursor()
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS cache (
+                    key TEXT PRIMARY KEY,
+                    message TEXT,
+                    metadata TEXT
+                )
+            """)
+            conn.commit()
+            c.execute("SELECT message, metadata FROM cache WHERE key = ?", (key_hash,))
+            row = c.fetchone()
+            conn.close()
+            if row is not None:
+                message, metadata_str = row
+                metadata = json.loads(metadata_str)
+                return message, metadata, True
+        
+        # 缓存未命中，执行异步调用
+        params = deepcopy(self.llm_config.generate_params)
+        if kwargs:
+            params.update(kwargs)
+        params["messages"] = messages
+        logger.debug(f"Async calling OpenAI GPT API with:\n{params}")
+        
+        if 'gpt' not in params['model'] or version.parse(openai.__version__) < version.parse("1.45.0"):
+            params['max_tokens'] = params.pop('max_completion_tokens')
+        
+        # 使用OpenAI异步客户端
+        try:
+            from openai import AsyncOpenAI, AsyncAzureOpenAI
+            
+            if not hasattr(self, '_async_client') or self._async_client is None:
+                if self.global_config.azure_endpoint is None:
+                    limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
+                    async_client = httpx.AsyncClient(limits=limits, timeout=httpx.Timeout(5*60, read=5*60))
+                    self._async_client = AsyncOpenAI(
+                        base_url=self.llm_base_url, 
+                        http_client=async_client, 
+                        max_retries=self.max_retries
+                    )
+                else:
+                    self._async_client = AsyncAzureOpenAI(
+                        api_version=self.global_config.azure_endpoint.split('api-version=')[1],
+                        azure_endpoint=self.global_config.azure_endpoint,
+                        max_retries=self.max_retries
+                    )
+            
+            response = await self._async_client.chat.completions.create(**params)
+            
+            response_message = response.choices[0].message.content
+            assert isinstance(response_message, str), "response_message should be a string"
+            
+            metadata = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "finish_reason": response.choices[0].finish_reason,
+            }
+            
+            # 保存到缓存
+            with FileLock(lock_file):
+                conn = sqlite3.connect(self.cache_file_name)
+                c = conn.cursor()
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS cache (
+                        key TEXT PRIMARY KEY,
+                        message TEXT,
+                        metadata TEXT
+                    )
+                """)
+                metadata_str = json.dumps(metadata)
+                c.execute("INSERT OR REPLACE INTO cache (key, message, metadata) VALUES (?, ?, ?)",
+                          (key_hash, response_message, metadata_str))
+                conn.commit()
+                conn.close()
+            
+            return response_message, metadata, False
+            
+        except Exception as e:
+            logger.error(f"Async inference failed: {e}, falling back to sync")
+            # 回退到同步调用
+            result = self.infer(messages, **kwargs)
+            return result
+
+    def batch_infer(
+        self,
+        batch_messages: List[List[TextChatMessage]],
+        max_workers: int = 32,
+        **kwargs
+    ) -> Tuple[List[str], List[dict], List[bool]]:
+        """
+        批量推理方法，优化缓存命中场景
+        
+        性能优化：
+        - 先批量检查缓存
+        - 只对缓存未命中的请求并行处理
+        - 缓存全命中时直接返回，避免线程池开销
+        
+        Args:
+            batch_messages: 批量消息列表
+            max_workers: 最大并行工作线程数
+            **kwargs: 其他参数传递给infer
+            
+        Returns:
+            Tuple[List[str], List[dict], List[bool]]: (响应消息列表, 元数据列表, 缓存命中列表)
+        """
+        if not batch_messages:
+            return [], [], []
+            
+        logger.info(f"Batch inference with {len(batch_messages)} messages, max_workers={max_workers}")
+        
+        # 获取生成参数
+        gen_params = getattr(self, "llm_config", {}).generate_params if hasattr(self, "llm_config") else {}
+        model = kwargs.get("model", gen_params.get("model"))
+        seed = kwargs.get("seed", gen_params.get("seed"))
+        temperature = kwargs.get("temperature", gen_params.get("temperature"))
+        
+        lock_file = self.cache_file_name + ".lock"
+        
+        # 批量计算所有缓存键
+        cache_keys = []
+        for messages in batch_messages:
+            key_data = {
+                "messages": messages,
+                "model": model,
+                "seed": seed,
+                "temperature": temperature,
+            }
+            key_str = json.dumps(key_data, sort_keys=True, default=str)
+            key_hash = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+            cache_keys.append(key_hash)
+        
+        # 批量检查缓存
+        cached_results = {}  # key_hash -> (message, metadata)
+        cache_miss_indices = []  # 缓存未命中的索引
+        
+        with FileLock(lock_file):
+            conn = sqlite3.connect(self.cache_file_name)
+            c = conn.cursor()
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS cache (
+                    key TEXT PRIMARY KEY,
+                    message TEXT,
+                    metadata TEXT
+                )
+            """)
+            conn.commit()
+            
+            # 使用IN查询批量获取缓存
+            placeholders = ','.join(['?' for _ in cache_keys])
+            c.execute(f"SELECT key, message, metadata FROM cache WHERE key IN ({placeholders})", cache_keys)
+            rows = c.fetchall()
+            conn.close()
+            
+            for row in rows:
+                key, message, metadata_str = row
+                cached_results[key] = (message, json.loads(metadata_str))
+        
+        # 确定缓存命中和未命中
+        for idx, key_hash in enumerate(cache_keys):
+            if key_hash not in cached_results:
+                cache_miss_indices.append(idx)
+        
+        cache_hit_count = len(batch_messages) - len(cache_miss_indices)
+        logger.info(f"Cache hits: {cache_hit_count}/{len(batch_messages)}")
+        
+        # 如果全部缓存命中，直接返回
+        if len(cache_miss_indices) == 0:
+            all_messages = []
+            all_metadata = []
+            all_cache_hits = []
+            for key_hash in cache_keys:
+                message, metadata = cached_results[key_hash]
+                all_messages.append(message)
+                all_metadata.append(metadata)
+                all_cache_hits.append(True)
+            return all_messages, all_metadata, all_cache_hits
+        
+        # 对于缓存未命中的请求，使用并行处理
+        # 预分配结果列表
+        all_messages = [None] * len(batch_messages)
+        all_metadata = [None] * len(batch_messages)
+        all_cache_hits = [False] * len(batch_messages)
+        
+        # 填充缓存命中的结果
+        for idx, key_hash in enumerate(cache_keys):
+            if key_hash in cached_results:
+                message, metadata = cached_results[key_hash]
+                all_messages[idx] = message
+                all_metadata[idx] = metadata
+                all_cache_hits[idx] = True
+        
+        # 并行处理缓存未命中的请求
+        miss_messages = [batch_messages[idx] for idx in cache_miss_indices]
+        
+        logger.info(f"Processing {len(miss_messages)} cache-miss requests in parallel")
+        
+        executor = _get_batch_executor(min(max_workers, len(miss_messages)))
+        
+        futures = []
+        for messages in miss_messages:
+            future = executor.submit(self.infer, messages, **kwargs)
+            futures.append(future)
+        
+        # 收集缓存未命中的结果
+        for i, future in enumerate(futures):
+            try:
+                result = future.result(timeout=300)
+                message, metadata, cache_hit = result
+                original_idx = cache_miss_indices[i]
+                all_messages[original_idx] = message
+                all_metadata[original_idx] = metadata
+                all_cache_hits[original_idx] = cache_hit
+            except Exception as e:
+                logger.error(f"Batch inference task failed: {e}")
+                original_idx = cache_miss_indices[i]
+                all_messages[original_idx] = ""
+                all_metadata[original_idx] = {"error": str(e)}
+                all_cache_hits[original_idx] = False
+        
+        return all_messages, all_metadata, all_cache_hits
+
+    async def abatch_infer(
+        self,
+        batch_messages: List[List[TextChatMessage]],
+        **kwargs
+    ) -> Tuple[List[str], List[dict], List[bool]]:
+        """
+        异步批量推理方法，使用asyncio.gather并行处理
+        
+        Args:
+            batch_messages: 批量消息列表
+            **kwargs: 其他参数
+            
+        Returns:
+            Tuple[List[str], List[dict], List[bool]]: (响应消息列表, 元数据列表, 缓存命中列表)
+        """
+        logger.info(f"Async batch inference with {len(batch_messages)} messages")
+        
+        # 创建所有异步任务
+        tasks = [self.ainfer(messages, **kwargs) for messages in batch_messages]
+        
+        # 并行执行所有任务
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 处理结果
+        all_messages = []
+        all_metadata = []
+        all_cache_hits = []
+        
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Async batch inference task {i} failed: {result}")
+                all_messages.append("")
+                all_metadata.append({"error": str(result)})
+                all_cache_hits.append(False)
+            else:
+                all_messages.append(result[0])
+                all_metadata.append(result[1])
+                all_cache_hits.append(result[2])
+        
+        cache_hit_count = sum(all_cache_hits)
+        logger.info(f"Async batch inference completed. Cache hits: {cache_hit_count}/{len(batch_messages)}")
+        
+        return all_messages, all_metadata, all_cache_hits
 
 

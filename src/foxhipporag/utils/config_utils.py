@@ -197,6 +197,32 @@ class BaseConfig:
         metadata={"help": "Feeding top k documents to the QA model for reading."}
     )
     
+    # Performance optimization attributes
+    llm_parallel_workers: int = field(
+        default=32,
+        metadata={"help": "Number of parallel workers for LLM inference."}
+    )
+    retrieval_parallel_workers: int = field(
+        default=8,
+        metadata={"help": "Number of parallel workers for retrieval."}
+    )
+    embedding_parallel_workers: int = field(
+        default=8,
+        metadata={"help": "Number of parallel workers for embedding encoding."}
+    )
+    embedding_max_batch_size: int = field(
+        default=256,
+        metadata={"help": "Maximum batch size for embedding encoding."}
+    )
+    enable_parallel_qa: bool = field(
+        default=True,
+        metadata={"help": "Enable parallel QA inference."}
+    )
+    enable_parallel_retrieval: bool = field(
+        default=True,
+        metadata={"help": "Enable parallel retrieval."}
+    )
+    
     # Save dir (highest level directory)
     save_dir: str = field(
         default=None,

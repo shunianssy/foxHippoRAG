@@ -13,6 +13,14 @@
 
 与之前的版本一样，foxHippoRAG 在在线过程中保持成本和延迟效率，同时与其他基于图的解决方案（如 GraphRAG、RAPTOR 和 LightRAG）相比，离线索引使用的资源显著减少。
 
+与之前的版本一样，foxHippoRAG 在在线过程中保持成本和延迟效率，同时与其他基于图的解决方案（如 GraphRAG、RAPTOR 和 LightRAG）相比，离线索引使用的资源显著减少。
+
+本仓库旨在优化 foxHippoRAG 的内存框架，以提高其在复杂任务上的性能，添加了大量异步处理和并行计算，以提高效率。
+
+本项目小狐狸有意维护，可以参见[foxHippoRAG](https://github.com/shunianssy/foxHippoRAG)作为代码托管，可以参见[Blog](https://i.shunx.top)追踪最新动态。
+
+
+HippoRAG 项目测试
 <p align="center">
   <img align="center" src="https://github.com/shunianssy/foxHippoRAG/raw/main/images/intro.png" />
 </p>

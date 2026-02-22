@@ -424,28 +424,85 @@ class foxHippoRAG:
 
         retrieval_results = []
 
-        for q_idx, query in tqdm(enumerate(queries), desc="Retrieving", total=len(queries)):
+        # 性能优化：批量计算所有查询的事实分数
+        logger.info(f"Computing fact scores for {len(queries)} queries in batch")
+        all_query_fact_scores = []
+        for query in queries:
+            all_query_fact_scores.append(self.get_fact_scores(query))
+
+        # 性能优化：使用线程池并行处理检索
+        max_workers = self.global_config.retrieval_parallel_workers if hasattr(self.global_config, 'retrieval_parallel_workers') else 8
+        
+        def _process_single_query(q_idx, query, query_fact_scores):
+            """处理单个查询的检索"""
             rerank_start = time.time()
-            query_fact_scores = self.get_fact_scores(query)
             top_k_fact_indices, top_k_facts, rerank_log = self.rerank_facts(query, query_fact_scores)
             rerank_end = time.time()
 
-            self.rerank_time += rerank_end - rerank_start
-
             if len(top_k_facts) == 0:
-                logger.info('No facts found after reranking, return DPR results')
+                logger.debug(f'Query {q_idx}: No facts found after reranking, return DPR results')
                 sorted_doc_ids, sorted_doc_scores = self.dense_passage_retrieval(query)
             else:
-                sorted_doc_ids, sorted_doc_scores = self.graph_search_with_fact_entities(query=query,
-                                                                                         link_top_k=self.global_config.linking_top_k,
-                                                                                         query_fact_scores=query_fact_scores,
-                                                                                         top_k_facts=top_k_facts,
-                                                                                         top_k_fact_indices=top_k_fact_indices,
-                                                                                         passage_node_weight=self.global_config.passage_node_weight)
+                sorted_doc_ids, sorted_doc_scores = self.graph_search_with_fact_entities(
+                    query=query,
+                    link_top_k=self.global_config.linking_top_k,
+                    query_fact_scores=query_fact_scores,
+                    top_k_facts=top_k_facts,
+                    top_k_fact_indices=top_k_fact_indices,
+                    passage_node_weight=self.global_config.passage_node_weight
+                )
 
-            top_k_docs = [self.chunk_embedding_store.get_row(self.passage_node_keys[idx])["content"] for idx in sorted_doc_ids[:num_to_retrieve]]
+            top_k_docs = [
+                self.chunk_embedding_store.get_row(self.passage_node_keys[idx])["content"] 
+                for idx in sorted_doc_ids[:num_to_retrieve]
+            ]
 
-            retrieval_results.append(QuerySolution(question=query, docs=top_k_docs, doc_scores=sorted_doc_scores[:num_to_retrieve]))
+            return QuerySolution(
+                question=query, 
+                docs=top_k_docs, 
+                doc_scores=sorted_doc_scores[:num_to_retrieve]
+            ), (rerank_end - rerank_start)
+
+        # 对于少量查询，直接串行处理
+        if len(queries) <= 4:
+            logger.info(f"Processing {len(queries)} queries sequentially")
+            for q_idx, (query, query_fact_scores) in enumerate(zip(queries, all_query_fact_scores)):
+                result, rerank_time = _process_single_query(q_idx, query, query_fact_scores)
+                self.rerank_time += rerank_time
+                retrieval_results.append(result)
+        else:
+            # 对于大量查询，使用线程池并行处理
+            logger.info(f"Processing {len(queries)} queries in parallel with {max_workers} workers")
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_process_single_query, q_idx, query, query_fact_scores): q_idx
+                    for q_idx, (query, query_fact_scores) in enumerate(zip(queries, all_query_fact_scores))
+                }
+                
+                # 预分配结果列表
+                temp_results = [None] * len(queries)
+                temp_rerank_times = [0] * len(queries)
+                
+                for future in tqdm(as_completed(futures), total=len(futures), desc="Retrieving"):
+                    q_idx = futures[future]
+                    try:
+                        result, rerank_time = future.result(timeout=120)
+                        temp_results[q_idx] = result
+                        temp_rerank_times[q_idx] = rerank_time
+                    except Exception as e:
+                        logger.error(f"Retrieval failed for query {q_idx}: {e}")
+                        # 创建空结果
+                        temp_results[q_idx] = QuerySolution(
+                            question=queries[q_idx], 
+                            docs=[], 
+                            doc_scores=[]
+                        )
+                        temp_rerank_times[q_idx] = 0
+                
+                retrieval_results = temp_results
+                self.rerank_time += sum(temp_rerank_times)
 
         retrieve_end_time = time.time()  # Record end time
 
@@ -724,10 +781,47 @@ class foxHippoRAG:
             all_qa_messages.append(
                 self.prompt_template_manager.render(name=f'rag_qa_{prompt_dataset_name}', prompt_user=prompt_user))
 
-        all_qa_results = [self.llm_model.infer(qa_messages) for qa_messages in tqdm(all_qa_messages, desc="QA Reading")]
-
-        all_response_message, all_metadata, all_cache_hit = zip(*all_qa_results)
-        all_response_message, all_metadata = list(all_response_message), list(all_metadata)
+        # 性能优化：使用批量并行推理替代串行调用
+        logger.info(f"Running batch QA inference for {len(all_qa_messages)} queries")
+        
+        # 检查LLM模型是否支持批量推理
+        if hasattr(self.llm_model, 'batch_infer'):
+            # 使用批量推理（并行处理）
+            all_response_message, all_metadata, all_cache_hit = self.llm_model.batch_infer(
+                all_qa_messages, 
+                max_workers=self.global_config.llm_parallel_workers if hasattr(self.global_config, 'llm_parallel_workers') else 32
+            )
+        else:
+            # 回退到串行处理，但使用线程池并行化
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            
+            max_workers = self.global_config.llm_parallel_workers if hasattr(self.global_config, 'llm_parallel_workers') else 32
+            
+            logger.info(f"Using ThreadPoolExecutor with {max_workers} workers for parallel inference")
+            
+            all_qa_results = []
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # 提交所有任务
+                future_to_idx = {
+                    executor.submit(self.llm_model.infer, qa_messages): idx 
+                    for idx, qa_messages in enumerate(all_qa_messages)
+                }
+                
+                # 预分配结果列表
+                all_qa_results = [None] * len(all_qa_messages)
+                
+                # 收集结果
+                for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="QA Reading"):
+                    idx = future_to_idx[future]
+                    try:
+                        result = future.result(timeout=300)
+                        all_qa_results[idx] = result
+                    except Exception as e:
+                        logger.error(f"QA inference failed for query {idx}: {e}")
+                        all_qa_results[idx] = ("", {"error": str(e)}, False)
+            
+            all_response_message, all_metadata, all_cache_hit = zip(*all_qa_results)
+            all_response_message, all_metadata = list(all_response_message), list(all_metadata)
 
         #Process responses and extract predicted answers.
         queries_solutions = []
