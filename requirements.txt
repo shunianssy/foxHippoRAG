@@ -15,3 +15,15 @@ scipy
 tqdm
 einops
 boto3
+pyarrow>=14.0.0
+
+# Vector Database backends (optional - install as needed)
+# FAISS - efficient local vector search
+# faiss-cpu>=1.7.4
+# faiss-gpu>=1.7.4  # For GPU support
+
+# Milvus - distributed vector database
+# pymilvus>=2.3.0
+
+# Chroma - lightweight embedded vector database
+# chromadb>=0.4.0

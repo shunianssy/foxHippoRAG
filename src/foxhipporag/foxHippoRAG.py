@@ -159,13 +159,19 @@ class foxHippoRAG:
                                                                               embedding_model_name=self.global_config.embedding_model_name)
         self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
                                                     os.path.join(self.working_dir, "chunk_embeddings"),
-                                                    self.global_config.embedding_batch_size, 'chunk')
+                                                    self.global_config.embedding_batch_size, 'chunk',
+                                                    vector_db_backend=self.global_config.vector_db_backend,
+                                                    global_config=self.global_config)
         self.entity_embedding_store = EmbeddingStore(self.embedding_model,
                                                      os.path.join(self.working_dir, "entity_embeddings"),
-                                                     self.global_config.embedding_batch_size, 'entity')
+                                                     self.global_config.embedding_batch_size, 'entity',
+                                                     vector_db_backend=self.global_config.vector_db_backend,
+                                                     global_config=self.global_config)
         self.fact_embedding_store = EmbeddingStore(self.embedding_model,
                                                    os.path.join(self.working_dir, "fact_embeddings"),
-                                                   self.global_config.embedding_batch_size, 'fact')
+                                                   self.global_config.embedding_batch_size, 'fact',
+                                                   vector_db_backend=self.global_config.vector_db_backend,
+                                                   global_config=self.global_config)
 
         self.prompt_template_manager = PromptTemplateManager(role_mapping={"system": "system", "user": "user", "assistant": "assistant"})
 

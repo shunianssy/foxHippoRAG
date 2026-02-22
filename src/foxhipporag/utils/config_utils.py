@@ -89,6 +89,86 @@ class BaseConfig:
         metadata={"help": "If set to True, will save the OpenIE model to disk."}
     )
     
+    # Vector Database specific attributes
+    vector_db_backend: Literal['parquet', 'faiss', 'milvus', 'chroma'] = field(
+        default='parquet',
+        metadata={"help": "Vector database backend to use. Options: parquet (default), faiss, milvus, chroma."}
+    )
+    vector_db_path: str = field(
+        default=None,
+        metadata={"help": "Path for local vector database storage. If None, uses save_dir/vdb."}
+    )
+    
+    # FAISS specific attributes
+    faiss_index_type: Literal['Flat', 'IVF', 'IVFFlat', 'IVFPQ', 'HNSW'] = field(
+        default='Flat',
+        metadata={"help": "FAISS index type. Flat is simplest, IVF types need training."}
+    )
+    faiss_nlist: int = field(
+        default=100,
+        metadata={"help": "Number of clusters for IVF index types in FAISS."}
+    )
+    faiss_nprobe: int = field(
+        default=10,
+        metadata={"help": "Number of clusters to probe during search in FAISS."}
+    )
+    faiss_use_gpu: bool = field(
+        default=False,
+        metadata={"help": "Whether to use GPU for FAISS operations."}
+    )
+    
+    # Milvus specific attributes
+    milvus_host: str = field(
+        default='localhost',
+        metadata={"help": "Milvus server host address."}
+    )
+    milvus_port: int = field(
+        default=19530,
+        metadata={"help": "Milvus server port."}
+    )
+    milvus_user: str = field(
+        default='',
+        metadata={"help": "Milvus username for authentication."}
+    )
+    milvus_password: str = field(
+        default='',
+        metadata={"help": "Milvus password for authentication."}
+    )
+    milvus_db_name: str = field(
+        default='default',
+        metadata={"help": "Milvus database name."}
+    )
+    milvus_collection_name: str = field(
+        default=None,
+        metadata={"help": "Milvus collection name. If None, uses foxhipporag_{namespace}."}
+    )
+    milvus_index_type: Literal['FLAT', 'IVF_FLAT', 'IVF_PQ', 'HNSW', 'ANNOY'] = field(
+        default='IVF_FLAT',
+        metadata={"help": "Milvus index type."}
+    )
+    milvus_metric_type: Literal['L2', 'IP', 'COSINE'] = field(
+        default='COSINE',
+        metadata={"help": "Distance metric type for Milvus."}
+    )
+    milvus_nlist: int = field(
+        default=1024,
+        metadata={"help": "Number of clusters for IVF index in Milvus."}
+    )
+    milvus_nprobe: int = field(
+        default=16,
+        metadata={"help": "Number of clusters to probe during search in Milvus."}
+    )
+    
+    # Chroma specific attributes
+    chroma_persistent: bool = field(
+        default=True,
+        metadata={"help": "Whether to use persistent storage for Chroma."}
+    )
+    chroma_distance_metric: Literal['cosine', 'l2', 'ip'] = field(
+        default='cosine',
+        metadata={"help": "Distance metric for Chroma vector search."}
+    )
+    
     # Preprocessing specific attributes
     text_preprocessor_class_name: str = field(
         default="TextPreprocessor",
@@ -259,3 +339,8 @@ class BaseConfig:
             if self.dataset is None: self.save_dir = 'outputs' # running freely
             else: self.save_dir = os.path.join('outputs', self.dataset) # customize your dataset's output dir here
         logger.debug(f"Initializing the highest level of save_dir to be {self.save_dir}")
+        
+        # 设置默认的向量数据库路径
+        if self.vector_db_path is None:
+            self.vector_db_path = os.path.join(self.save_dir, 'vdb')
+            logger.debug(f"Initializing vector_db_path to be {self.vector_db_path}")

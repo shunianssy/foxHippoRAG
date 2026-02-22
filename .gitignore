@@ -1,6 +1,7 @@
 hipporag2/*
 .idea/*
 .venv/
+tests/
 
 # Ignore test files
 test_example.py

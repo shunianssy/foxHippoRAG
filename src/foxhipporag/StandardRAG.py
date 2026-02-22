@@ -96,7 +96,9 @@ class StandardRAG:
 
         self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
                                                     os.path.join(self.working_dir, "chunk_embeddings"),
-                                                    self.global_config.embedding_batch_size, 'chunk')
+                                                    self.global_config.embedding_batch_size, 'chunk',
+                                                    vector_db_backend=self.global_config.vector_db_backend,
+                                                    global_config=self.global_config)
 
         self.ready_to_retrieve = False
 

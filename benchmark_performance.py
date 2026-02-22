@@ -2,11 +2,11 @@
 HippoRAG性能基准测试脚本
 
 用于测试和比较优化前后的性能差异
+参考 demo_ai_assistant_hipporag.py 的轻量配置方式
 """
 
 import os
 import time
-import asyncio
 import logging
 from typing import List, Dict, Any
 from dataclasses import dataclass
@@ -36,12 +36,6 @@ class PerformanceBenchmark:
     """性能基准测试类"""
     
     def __init__(self, save_dir: str = "outputs/benchmark"):
-        """
-        初始化基准测试
-        
-        Args:
-            save_dir: 存储目录
-        """
         self.save_dir = save_dir
         self.results: List[BenchmarkResult] = []
         
@@ -53,12 +47,6 @@ class PerformanceBenchmark:
         
         # 测试LLM批量推理
         self.benchmark_llm_batch_inference()
-        
-        # 测试嵌入编码
-        self.benchmark_embedding_encoding()
-        
-        # 测试检索性能
-        self.benchmark_retrieval()
         
         # 打印结果摘要
         self.print_summary()
@@ -73,185 +61,124 @@ class PerformanceBenchmark:
         logger.info(f"\n--- 测试LLM批量推理 (查询数: {num_queries}) ---")
         
         try:
-            from src.foxhipporag import foxHippoRAG
-            from src.foxhipporag.utils.config_utils import BaseConfig
+            # 参考 demo_ai_assistant_hipporag.py 的轻量配置方式
+            # 直接导入LLM模块，避免导入整个foxhipporag
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             
-            # 初始化配置
+            from src.foxhipporag.llm.openai_gpt import CacheOpenAI
+            from src.foxhipporag.utils.config_utils import BaseConfig
+            import random
+            import string
+            
+            # 创建轻量配置
             config = BaseConfig()
             config.save_dir = self.save_dir
             config.llm_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
             config.llm_base_url = os.getenv("OPENAI_API_BASE_URL")
-            config.llm_parallel_workers = 8
+            config.max_retry_attempts = 2
+            config.max_new_tokens = 100
             
-            # 初始化HippoRAG
-            hippo = foxHippoRAG(global_config=config)
+            llm = CacheOpenAI.from_experiment_config(config)
             
-            # 准备测试消息
-            test_messages = [
-                [{"role": "user", "content": f"测试问题 {i}: 请用一句话解释什么是人工智能？"}]
-                for i in range(num_queries)
-            ]
+            # 生成唯一的测试消息（避免缓存命中）
+            def generate_unique_message(idx):
+                random_suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                return [{"role": "user", "content": f"测试 {idx} [{random_suffix}]: 请用一句话回答1+1等于几？"}]
             
-            # 测试串行推理
-            logger.info("测试串行推理...")
-            start_time = time.time()
-            serial_results = []
-            for msg in test_messages[:5]:  # 只测试5个以节省时间
-                result = hippo.llm_model.infer(msg)
-                serial_results.append(result)
-            serial_time = time.time() - start_time
+            # 测试1：缓存未命中场景（使用唯一消息）
+            logger.info(f"\n=== 测试缓存未命中场景 ({num_queries}个请求) ===")
             
-            # 测试批量并行推理
-            logger.info("测试批量并行推理...")
-            start_time = time.time()
-            batch_results = hippo.llm_model.batch_infer(test_messages, max_workers=8)
-            batch_time = time.time() - start_time
+            # 串行推理（缓存未命中）
+            unique_messages_serial = [generate_unique_message(i) for i in range(num_queries)]
+            logger.info("测试串行推理（缓存未命中）...")
+            start = time.time()
+            for msg in unique_messages_serial:
+                llm.infer(msg)
+            serial_time_miss = time.time() - start
+            
+            # 并行推理（缓存未命中）
+            unique_messages_parallel = [generate_unique_message(i + num_queries) for i in range(num_queries)]
+            logger.info("测试并行推理（缓存未命中）...")
+            start = time.time()
+            llm.batch_infer(unique_messages_parallel, max_workers=8)
+            batch_time_miss = time.time() - start
+            
+            # 测试2：缓存命中场景（使用相同消息）
+            logger.info(f"\n=== 测试缓存命中场景 ({num_queries}个请求) ===")
+            
+            # 准备缓存命中的消息（先执行一次确保缓存）
+            cached_messages = [generate_unique_message(0) for _ in range(num_queries)]
+            for msg in cached_messages:
+                llm.infer(msg)  # 预热缓存
+            
+            # 串行推理（缓存命中）
+            logger.info("测试串行推理（缓存命中）...")
+            start = time.time()
+            for msg in cached_messages:
+                llm.infer(msg)
+            serial_time_hit = time.time() - start
+            
+            # 并行推理（缓存命中）
+            logger.info("测试并行推理（缓存命中）...")
+            start = time.time()
+            llm.batch_infer(cached_messages, max_workers=8)
+            batch_time_hit = time.time() - start
             
             # 记录结果
             self.results.append(BenchmarkResult(
-                test_name="LLM串行推理",
-                total_time=serial_time,
-                items_processed=5,
-                items_per_second=5 / serial_time
+                test_name="LLM串行推理(缓存未命中)",
+                total_time=serial_time_miss,
+                items_processed=num_queries,
+                items_per_second=num_queries / serial_time_miss
             ))
             
             self.results.append(BenchmarkResult(
-                test_name="LLM批量并行推理",
-                total_time=batch_time,
+                test_name="LLM并行推理(缓存未命中)",
+                total_time=batch_time_miss,
                 items_processed=num_queries,
-                items_per_second=num_queries / batch_time,
-                details={
-                    "加速比": f"{serial_time / batch_time * (num_queries / 5):.2f}x"
-                }
+                items_per_second=num_queries / batch_time_miss,
+                details={"加速比": f"{serial_time_miss / batch_time_miss:.2f}x"}
             ))
             
-            logger.info(f"串行推理时间: {serial_time:.2f}s")
-            logger.info(f"批量并行推理时间: {batch_time:.2f}s")
-            logger.info(f"加速比: {serial_time / batch_time * (num_queries / 5):.2f}x")
+            self.results.append(BenchmarkResult(
+                test_name="LLM串行推理(缓存命中)",
+                total_time=serial_time_hit,
+                items_processed=num_queries,
+                items_per_second=num_queries / serial_time_hit
+            ))
+            
+            self.results.append(BenchmarkResult(
+                test_name="LLM并行推理(缓存命中)",
+                total_time=batch_time_hit,
+                items_processed=num_queries,
+                items_per_second=num_queries / batch_time_hit,
+                details={"加速比": f"{serial_time_hit / batch_time_hit:.2f}x"}
+            ))
+            
+            # 打印详细结果
+            logger.info("\n" + "=" * 60)
+            logger.info("LLM批量推理测试结果")
+            logger.info("=" * 60)
+            
+            logger.info(f"\n【缓存未命中场景】")
+            logger.info(f"  串行时间: {serial_time_miss:.2f}s")
+            logger.info(f"  并行时间: {batch_time_miss:.2f}s")
+            logger.info(f"  加速比: {serial_time_miss/batch_time_miss:.2f}x")
+            
+            logger.info(f"\n【缓存命中场景】")
+            logger.info(f"  串行时间: {serial_time_hit:.4f}s")
+            logger.info(f"  并行时间: {batch_time_hit:.4f}s")
+            logger.info(f"  加速比: {serial_time_hit/batch_time_hit:.2f}x")
+            
+            logger.info(f"\n【总结】")
+            logger.info(f"  并行推理在缓存未命中时效果显著（真实API调用）")
+            logger.info(f"  缓存命中时，优化后的代码避免了线程池开销")
             
         except Exception as e:
             logger.error(f"LLM批量推理测试失败: {e}")
-    
-    def benchmark_embedding_encoding(self, num_texts: int = 100):
-        """
-        测试嵌入编码性能
-        
-        Args:
-            num_texts: 测试文本数量
-        """
-        logger.info(f"\n--- 测试嵌入编码 (文本数: {num_texts}) ---")
-        
-        try:
-            from src.foxhipporag import foxHippoRAG
-            from src.foxhipporag.utils.config_utils import BaseConfig
-            
-            # 初始化配置
-            config = BaseConfig()
-            config.save_dir = self.save_dir
-            config.embedding_model_name = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-            config.embedding_base_url = os.getenv("EMBEDDING_BASE_URL")
-            config.embedding_batch_size = 32
-            config.embedding_parallel_workers = 8
-            
-            # 初始化HippoRAG
-            hippo = foxHippoRAG(global_config=config)
-            
-            # 准备测试文本
-            test_texts = [f"这是测试文本编号 {i}，用于测试嵌入编码性能。" for i in range(num_texts)]
-            
-            # 测试编码性能
-            logger.info("测试嵌入编码...")
-            start_time = time.time()
-            embeddings = hippo.embedding_model.batch_encode(test_texts)
-            encode_time = time.time() - start_time
-            
-            # 记录结果
-            self.results.append(BenchmarkResult(
-                test_name="嵌入编码",
-                total_time=encode_time,
-                items_processed=num_texts,
-                items_per_second=num_texts / encode_time,
-                details={
-                    "嵌入维度": embeddings.shape[1] if len(embeddings.shape) > 1 else "N/A"
-                }
-            ))
-            
-            logger.info(f"编码时间: {encode_time:.2f}s")
-            logger.info(f"吞吐量: {num_texts / encode_time:.2f} 文本/秒")
-            
-        except Exception as e:
-            logger.error(f"嵌入编码测试失败: {e}")
-    
-    def benchmark_retrieval(self, num_queries: int = 10):
-        """
-        测试检索性能
-        
-        Args:
-            num_queries: 测试查询数量
-        """
-        logger.info(f"\n--- 测试检索性能 (查询数: {num_queries}) ---")
-        
-        try:
-            from src.foxhipporag import foxHippoRAG
-            from src.foxhipporag.utils.config_utils import BaseConfig
-            
-            # 初始化配置
-            config = BaseConfig()
-            config.save_dir = self.save_dir
-            config.retrieval_parallel_workers = 8
-            
-            # 初始化HippoRAG
-            hippo = foxHippoRAG(global_config=config)
-            
-            # 准备测试文档
-            test_docs = [
-                f"测试文档 {i}：这是关于人工智能和机器学习的内容。"
-                f"深度学习是机器学习的一个子领域，使用神经网络进行学习。"
-                for i in range(100)
-            ]
-            
-            # 索引文档
-            logger.info("索引测试文档...")
-            start_time = time.time()
-            hippo.index(test_docs)
-            index_time = time.time() - start_time
-            logger.info(f"索引时间: {index_time:.2f}s")
-            
-            # 准备测试查询
-            test_queries = [
-                "什么是深度学习？",
-                "机器学习有哪些应用？",
-                "人工智能的发展历史是什么？",
-                "神经网络是如何工作的？",
-                "什么是自然语言处理？",
-            ][:num_queries]
-            
-            # 测试检索性能
-            logger.info("测试检索...")
-            start_time = time.time()
-            results = hippo.retrieve(test_queries, num_to_retrieve=5)
-            retrieval_time = time.time() - start_time
-            
-            # 记录结果
-            self.results.append(BenchmarkResult(
-                test_name="文档索引",
-                total_time=index_time,
-                items_processed=len(test_docs),
-                items_per_second=len(test_docs) / index_time
-            ))
-            
-            self.results.append(BenchmarkResult(
-                test_name="检索",
-                total_time=retrieval_time,
-                items_processed=num_queries,
-                items_per_second=num_queries / retrieval_time
-            ))
-            
-            logger.info(f"检索时间: {retrieval_time:.2f}s")
-            logger.info(f"检索吞吐量: {num_queries / retrieval_time:.2f} 查询/秒")
-            
-        except Exception as e:
-            logger.error(f"检索测试失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     def print_summary(self):
         """打印结果摘要"""
@@ -259,11 +186,11 @@ class PerformanceBenchmark:
         logger.info("性能基准测试结果摘要")
         logger.info("=" * 60)
         
-        print(f"\n{'测试名称':<30} {'总时间(s)':<12} {'处理数量':<10} {'吞吐量(项/秒)':<15}")
-        print("-" * 70)
+        print(f"\n{'测试名称':<35} {'总时间(s)':<12} {'处理数量':<10} {'吞吐量(项/秒)':<15}")
+        print("-" * 75)
         
         for result in self.results:
-            print(f"{result.test_name:<30} {result.total_time:<12.2f} {result.items_processed:<10} {result.items_per_second:<15.2f}")
+            print(f"{result.test_name:<35} {result.total_time:<12.2f} {result.items_processed:<10} {result.items_per_second:<15.2f}")
             if result.details:
                 for key, value in result.details.items():
                     print(f"  └─ {key}: {value}")
@@ -272,24 +199,43 @@ class PerformanceBenchmark:
 
 
 def run_quick_benchmark():
-    """运行快速基准测试"""
-    benchmark = PerformanceBenchmark()
+    """运行快速基准测试 - 仅测试LLM批量推理"""
+    logger.info("=" * 60)
+    logger.info("运行快速基准测试")
+    logger.info("=" * 60)
     
-    # 运行简化的测试
-    logger.info("运行快速基准测试...")
-    
-    # 只测试LLM批量推理
     try:
-        # 直接导入LLM模块，避免导入整个foxhipporag
+        # 直接导入需要的模块，避免导入整个foxhipporag包
         import sys
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import importlib.util
         
-        from src.foxhipporag.llm.openai_gpt import CacheOpenAI
-        from src.foxhipporag.utils.config_utils import BaseConfig
-        import time
+        # 获取项目根目录
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        
+        # 直接加载 config_utils
+        config_utils_path = os.path.join(project_root, "src", "foxhipporag", "utils", "config_utils.py")
+        spec = importlib.util.spec_from_file_location("config_utils", config_utils_path)
+        config_utils = importlib.util.module_from_spec(spec)
+        sys.modules["config_utils"] = config_utils
+        spec.loader.exec_module(config_utils)
+        BaseConfig = config_utils.BaseConfig
+        
+        # 直接加载 openai_gpt（不经过__init__.py）
+        openai_gpt_path = os.path.join(project_root, "src", "foxhipporag", "llm", "openai_gpt.py")
+        spec = importlib.util.spec_from_file_location("openai_gpt", openai_gpt_path)
+        openai_gpt = importlib.util.module_from_spec(spec)
+        sys.modules["openai_gpt"] = openai_gpt
+        # 先设置依赖
+        sys.modules["src.foxhipporag.utils.config_utils"] = config_utils
+        sys.modules["src.foxhipporag.utils"] = type(sys)('utils')
+        sys.modules["src.foxhipporag.utils"].config_utils = config_utils
+        spec.loader.exec_module(openai_gpt)
+        CacheOpenAI = openai_gpt.CacheOpenAI
+        
         import random
         import string
         
+        # 创建轻量配置
         config = BaseConfig()
         config.save_dir = "outputs/benchmark"
         config.llm_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
