@@ -249,6 +249,7 @@ class PassageDensityEvaluator:
         性能优化版本：
         - 使用 Numba 加速数值计算
         - 批量处理减少函数调用开销
+        - 向量化操作替代循环
         
         Args:
             texts: 段落文本列表
@@ -257,6 +258,9 @@ class PassageDensityEvaluator:
             密度得分数组
         """
         n = len(texts)
+        
+        if n == 0:
+            return np.array([], dtype=np.float32)
         
         # 预分配数组
         entity_counts = np.zeros(n, dtype=np.float32)
@@ -271,12 +275,12 @@ class PassageDensityEvaluator:
             text_length_scores[i] = self.compute_text_length_score(text)
             content_richness_scores[i] = self.compute_content_richness(text)
         
-        # 归一化实体和事实数量（使用对数函数）
-        # 使用 Numba 优化或 NumPy 实现
+        # 向量化归一化实体和事实数量（使用对数函数）
+        # np.log1p 是向量化操作，比循环快得多
         normalized_entity_scores = np.minimum(1.0, np.log1p(entity_counts) / 3.0)
         normalized_fact_scores = np.minimum(1.0, np.log1p(fact_counts) / 2.5)
         
-        # 计算综合信息密度得分
+        # 向量化计算综合信息密度得分
         density_scores = (
             self.config.entity_count_weight * normalized_entity_scores +
             self.config.fact_count_weight * normalized_fact_scores +
@@ -362,6 +366,11 @@ class EvidenceQualityScorer:
         """
         根据证据质量对段落进行排序
         
+        性能优化版本：
+        - 批量获取密度得分
+        - 向量化计算证据质量得分
+        - 使用 np.argsort 替代手动排序
+        
         Args:
             passage_ids: 段落ID列表
             passage_texts: 段落文本列表
@@ -372,29 +381,75 @@ class EvidenceQualityScorer:
             排序后的段落索引和得分
         """
         n = len(passage_texts)
-        evidence_scores = np.zeros(n)
+        if n == 0:
+            return np.array([], dtype=np.int64), np.array([], dtype=np.float32)
+        
+        # 批量获取密度得分（减少缓存查找次数）
+        density_scores = np.zeros(n, dtype=np.float32)
+        uncached_indices = []
+        uncached_texts = []
         
         for i, (pid, text) in enumerate(zip(passage_ids, passage_texts)):
-            # 检查缓存
             if pid in self._density_cache:
-                density_score = self._density_cache[pid]
+                density_scores[i] = self._density_cache[pid]
             else:
-                density_result = self.density_evaluator.evaluate_passage_density(text)
-                density_score = density_result['density_score']
-                self._density_cache[pid] = density_score
-            
-            # 计算证据质量得分
-            evidence_scores[i] = self.compute_evidence_score(
-                semantic_scores[i], 
-                density_score,
-                query_type
-            )
+                uncached_indices.append(i)
+                uncached_texts.append(text)
         
-        # 排序
+        # 批量计算未缓存的密度得分
+        if uncached_texts:
+            batch_density_results = self.density_evaluator.batch_evaluate_density(uncached_texts)
+            for idx, pid, density_score in zip(uncached_indices, 
+                                                [passage_ids[i] for i in uncached_indices],
+                                                batch_density_results):
+                density_scores[idx] = density_score
+                self._density_cache[pid] = density_score
+        
+        # 向量化计算证据质量得分
+        evidence_scores = self._compute_evidence_scores_vectorized(
+            semantic_scores, density_scores, query_type
+        )
+        
+        # 使用 np.argsort 排序（比手动排序更快）
         sorted_indices = np.argsort(evidence_scores)[::-1]
         sorted_scores = evidence_scores[sorted_indices]
         
         return sorted_indices, sorted_scores
+    
+    def _compute_evidence_scores_vectorized(self,
+                                            semantic_scores: np.ndarray,
+                                            density_scores: np.ndarray,
+                                            query_type: str = 'general') -> np.ndarray:
+        """
+        向量化计算证据质量得分
+        
+        Args:
+            semantic_scores: 语义相似度得分数组
+            density_scores: 信息密度得分数组
+            query_type: 查询类型
+            
+        Returns:
+            证据质量得分数组
+        """
+        # 根据查询类型调整权重
+        if query_type == 'factual':
+            semantic_weight = 0.7
+            density_weight = 0.3
+        elif query_type == 'exploratory':
+            semantic_weight = 0.4
+            density_weight = 0.6
+        else:
+            semantic_weight = 0.5
+            density_weight = 0.5
+        
+        # 向量化计算
+        multiplicative_score = semantic_scores * density_scores
+        weighted_score = semantic_weight * semantic_scores + density_weight * density_scores
+        
+        # 最终得分是两种方式的加权平均
+        final_scores = 0.3 * multiplicative_score + 0.7 * weighted_score
+        
+        return final_scores
     
     def clear_cache(self):
         """清空密度缓存"""

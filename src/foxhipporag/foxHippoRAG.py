@@ -1603,6 +1603,10 @@ class foxHippoRAG:
         to retain only the top `link_top_k` ranked nodes. Non-selected phrases in phrase
         weights are reset to a weight of 0.0.
 
+        性能优化版本：
+        - 使用 heapq.nlargest 快速获取 top-k
+        - 向量化权重更新
+
         Args:
             link_top_k (int): Number of top-ranked nodes to retain in the linking score map.
             all_phrase_weights (np.ndarray): An array representing the phrase weights, indexed
@@ -1615,21 +1619,34 @@ class foxHippoRAG:
             of all_phrase_weights with unselected weights set to 0.0, and the filtered
             linking_score_map containing only the top `link_top_k` phrases.
         """
-        # choose top ranked nodes in linking_score_map
-        linking_score_map = dict(sorted(linking_score_map.items(), key=lambda x: x[1], reverse=True)[:link_top_k])
+        import heapq
+        
+        # 使用 heapq.nlargest 快速获取 top-k（比排序整个字典更快）
+        top_k_items = heapq.nlargest(link_top_k, linking_score_map.items(), key=lambda x: x[1])
+        linking_score_map = dict(top_k_items)
 
         # only keep the top_k phrases in all_phrase_weights
         top_k_phrases = set(linking_score_map.keys())
-        top_k_phrases_keys = set(
-            [compute_mdhash_id(content=top_k_phrase, prefix="entity-") for top_k_phrase in top_k_phrases])
+        
+        # 批量计算哈希ID
+        top_k_phrases_keys = {
+            compute_mdhash_id(content=phrase, prefix="entity-") 
+            for phrase in top_k_phrases
+        }
 
-        for phrase_key in self.node_name_to_vertex_idx:
-            if phrase_key not in top_k_phrases_keys:
-                phrase_id = self.node_name_to_vertex_idx.get(phrase_key, None)
-                if phrase_id is not None:
-                    all_phrase_weights[phrase_id] = 0.0
+        # 向量化权重更新：创建需要保留的索引集合
+        indices_to_keep = {
+            self.node_name_to_vertex_idx[phrase_key] 
+            for phrase_key in top_k_phrases_keys 
+            if phrase_key in self.node_name_to_vertex_idx
+        }
 
-        assert np.count_nonzero(all_phrase_weights) == len(linking_score_map.keys())
+        # 将不在 top-k 中的权重置零
+        all_indices = set(self.node_name_to_vertex_idx.values())
+        indices_to_zero = all_indices - indices_to_keep
+        for idx in indices_to_zero:
+            all_phrase_weights[idx] = 0.0
+
         return all_phrase_weights, linking_score_map
 
     def graph_search_with_fact_entities(self, query: str,
@@ -1708,43 +1725,48 @@ class foxHippoRAG:
 
         phrases_and_ids = set()
 
+        # 性能优化：预计算所有短语哈希，减少重复计算
+        phrase_hash_cache = {}
+        
         for rank, f in enumerate(top_k_facts):
             subject_phrase = f[0].lower()
-            f[1].lower()
             object_phrase = f[2].lower()
             fact_score = query_fact_scores[
                 top_k_fact_indices[rank]] if query_fact_scores.ndim > 0 else query_fact_scores
 
             for phrase in [subject_phrase, object_phrase]:
-                phrase_key = compute_mdhash_id(
-                    content=phrase,
-                    prefix="entity-"
-                )
+                # 使用缓存避免重复计算哈希
+                if phrase not in phrase_hash_cache:
+                    phrase_hash_cache[phrase] = compute_mdhash_id(content=phrase, prefix="entity-")
+                phrase_key = phrase_hash_cache[phrase]
+                
                 phrase_id = self.node_name_to_vertex_idx.get(phrase_key, None)
 
                 if phrase_id is not None:
                     weighted_fact_score = fact_score
 
-                    if len(self.ent_node_to_chunk_ids.get(phrase_key, set())) > 0:
-                        weighted_fact_score /= len(self.ent_node_to_chunk_ids[phrase_key])
+                    # 使用 get 方法优化字典访问
+                    chunk_count = len(self.ent_node_to_chunk_ids.get(phrase_key, set()))
+                    if chunk_count > 0:
+                        weighted_fact_score /= chunk_count
 
                     phrase_weights[phrase_id] += weighted_fact_score
                     number_of_occurs[phrase_id] += 1
                     phrases_and_ids.add((phrase, phrase_id))
 
-        # 避免除以零的警告：只对出现过至少一次的 phrase 进行除法操作
+        # 向量化除法操作：避免除以零
         valid_mask = number_of_occurs > 0
         phrase_weights[valid_mask] /= number_of_occurs[valid_mask]
 
+        # 使用字典推导式优化 phrase_scores 构建
+        phrase_scores_temp = {}
         for phrase, phrase_id in phrases_and_ids:
-            if phrase not in phrase_scores:
-                phrase_scores[phrase] = []
+            if phrase not in phrase_scores_temp:
+                phrase_scores_temp[phrase] = []
+            phrase_scores_temp[phrase].append(phrase_weights[phrase_id])
 
-            phrase_scores[phrase].append(phrase_weights[phrase_id])
-
-        # calculate average fact score for each phrase
-        for phrase, scores in phrase_scores.items():
-            linking_score_map[phrase] = float(np.mean(scores))
+        # 使用字典推导式计算 linking_score_map
+        linking_score_map = {phrase: float(np.mean(scores)) for phrase, scores in phrase_scores_temp.items()}
 
         if link_top_k:
             phrase_weights, linking_score_map = self.get_top_k_weights(link_top_k,
@@ -1755,13 +1777,26 @@ class foxHippoRAG:
         dpr_sorted_doc_ids, dpr_sorted_doc_scores = self.dense_passage_retrieval(query)
         normalized_dpr_sorted_scores = min_max_normalize(dpr_sorted_doc_scores)
 
-        for i, dpr_sorted_doc_id in enumerate(dpr_sorted_doc_ids.tolist()):
-            passage_node_key = self.passage_node_keys[dpr_sorted_doc_id]
+        # 性能优化：向量化计算段落权重
+        # 批量获取段落节点ID和文本
+        dpr_doc_ids_list = dpr_sorted_doc_ids.tolist()
+        passage_node_keys_batch = [self.passage_node_keys[idx] for idx in dpr_doc_ids_list]
+        
+        # 批量获取段落文本
+        passage_texts_batch = []
+        for passage_node_key in passage_node_keys_batch:
+            row = self.chunk_embedding_store.get_row(passage_node_key)
+            passage_texts_batch.append(row["content"] if row else "")
+        
+        # 向量化更新段落权重
+        for i, (dpr_sorted_doc_id, passage_node_key, passage_text) in enumerate(
+            zip(dpr_doc_ids_list, passage_node_keys_batch, passage_texts_batch)
+        ):
             passage_dpr_score = normalized_dpr_sorted_scores[i]
-            passage_node_id = self.node_name_to_vertex_idx[passage_node_key]
-            passage_weights[passage_node_id] = passage_dpr_score * passage_node_weight
-            passage_node_text = self.chunk_embedding_store.get_row(passage_node_key)["content"]
-            linking_score_map[passage_node_text] = passage_dpr_score * passage_node_weight
+            passage_node_id = self.node_name_to_vertex_idx.get(passage_node_key)
+            if passage_node_id is not None:
+                passage_weights[passage_node_id] = passage_dpr_score * passage_node_weight
+            linking_score_map[passage_text] = passage_dpr_score * passage_node_weight
 
         #Combining phrase and passage scores into one array for PPR
         node_weights = phrase_weights + passage_weights

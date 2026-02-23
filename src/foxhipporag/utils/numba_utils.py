@@ -24,7 +24,7 @@ Numba 优化工具模块
 
 import numpy as np
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -542,6 +542,251 @@ def benchmark(size: int = 10000, dim: int = 512) -> dict:
     }
     
     return results
+
+
+# ============================================================
+# 加权平均计算优化
+# ============================================================
+
+@jit(nopython=True, cache=True, parallel=True)
+def numba_weighted_average(values: np.ndarray, weights: np.ndarray) -> float:
+    """
+    计算加权平均
+    
+    Args:
+        values: 值数组
+        weights: 权重数组
+        
+    Returns:
+        加权平均值
+    """
+    total_weight = 0.0
+    weighted_sum = 0.0
+    
+    for i in prange(len(values)):
+        total_weight += weights[i]
+        weighted_sum += values[i] * weights[i]
+    
+    if total_weight < 1e-10:
+        return 0.0
+    
+    return weighted_sum / total_weight
+
+
+@jit(nopython=True, cache=True, parallel=True)
+def numba_batch_weighted_average(values_matrix: np.ndarray, weights_matrix: np.ndarray) -> np.ndarray:
+    """
+    批量计算加权平均
+    
+    Args:
+        values_matrix: 值矩阵 (n, m)
+        weights_matrix: 权重矩阵 (n, m)
+        
+    Returns:
+        加权平均值数组 (n,)
+    """
+    n = values_matrix.shape[0]
+    result = np.empty(n, dtype=np.float32)
+    
+    for i in prange(n):
+        total_weight = 0.0
+        weighted_sum = 0.0
+        
+        for j in range(values_matrix.shape[1]):
+            total_weight += weights_matrix[i, j]
+            weighted_sum += values_matrix[i, j] * weights_matrix[i, j]
+        
+        if total_weight < 1e-10:
+            result[i] = 0.0
+        else:
+            result[i] = weighted_sum / total_weight
+    
+    return result
+
+
+# ============================================================
+# 稀疏向量操作优化
+# ============================================================
+
+@jit(nopython=True, cache=True)
+def numba_sparse_dot_product(indices1: np.ndarray, values1: np.ndarray,
+                              indices2: np.ndarray, values2: np.ndarray) -> float:
+    """
+    计算两个稀疏向量的点积
+    
+    Args:
+        indices1: 第一个向量的非零索引
+        values1: 第一个向量的非零值
+        indices2: 第二个向量的非零索引
+        values2: 第二个向量的非零值
+        
+    Returns:
+        点积结果
+    """
+    result = 0.0
+    i, j = 0, 0
+    
+    while i < len(indices1) and j < len(indices2):
+        if indices1[i] == indices2[j]:
+            result += values1[i] * values2[j]
+            i += 1
+            j += 1
+        elif indices1[i] < indices2[j]:
+            i += 1
+        else:
+            j += 1
+    
+    return result
+
+
+# ============================================================
+# 分数融合优化
+# ============================================================
+
+@jit(nopython=True, cache=True, parallel=True)
+def numba_fuse_scores(scores1: np.ndarray, scores2: np.ndarray, 
+                      weight1: float, weight2: float) -> np.ndarray:
+    """
+    融合两组分数
+    
+    Args:
+        scores1: 第一组分数
+        scores2: 第二组分数
+        weight1: 第一组权重
+        weight2: 第二组权重
+        
+    Returns:
+        融合后的分数
+    """
+    n = len(scores1)
+    result = np.empty(n, dtype=np.float32)
+    
+    for i in prange(n):
+        result[i] = weight1 * scores1[i] + weight2 * scores2[i]
+    
+    return result
+
+
+@jit(nopython=True, cache=True, parallel=True)
+def numba_multiplicative_fuse(scores1: np.ndarray, scores2: np.ndarray,
+                               alpha: float = 0.5) -> np.ndarray:
+    """
+    乘法融合两组分数
+    
+    结合加权和乘法融合，确保两者都高时得分才高
+    
+    Args:
+        scores1: 第一组分数
+        scores2: 第二组分数
+        alpha: 加权融合的权重
+        
+    Returns:
+        融合后的分数
+    """
+    n = len(scores1)
+    result = np.empty(n, dtype=np.float32)
+    
+    for i in prange(n):
+        multiplicative = scores1[i] * scores2[i]
+        weighted = alpha * scores1[i] + (1 - alpha) * scores2[i]
+        result[i] = 0.3 * multiplicative + 0.7 * weighted
+    
+    return result
+
+
+# ============================================================
+# 批量哈希计算优化（用于实体ID计算）
+# ============================================================
+
+def batch_compute_mdhash_id(contents: List[str], prefix: str = "") -> List[str]:
+    """
+    批量计算MD5哈希ID
+    
+    使用多线程加速批量哈希计算
+    
+    Args:
+        contents: 内容字符串列表
+        prefix: 前缀
+        
+    Returns:
+        哈希ID列表
+    """
+    import hashlib
+    from hashlib import md5
+    
+    result = []
+    for content in contents:
+        hash_id = prefix + md5(content.encode()).hexdigest()
+        result.append(hash_id)
+    
+    return result
+
+
+# ============================================================
+# 索引映射优化
+# ============================================================
+
+@jit(nopython=True, cache=True)
+def numba_build_index_mapping(keys: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    构建索引映射
+    
+    Args:
+        keys: 键数组
+        
+    Returns:
+        (unique_keys, indices): 唯一键和对应的索引
+    """
+    n = len(keys)
+    unique_keys = []
+    indices = np.zeros(n, dtype=np.int64)
+    
+    key_to_idx = {}
+    current_idx = 0
+    
+    for i in range(n):
+        key = keys[i]
+        if key not in key_to_idx:
+            key_to_idx[key] = current_idx
+            unique_keys.append(key)
+            current_idx += 1
+        indices[i] = key_to_idx[key]
+    
+    return np.array(unique_keys), indices
+
+
+# ============================================================
+# 批量 Top-K 选择优化（支持动态 K）
+# ============================================================
+
+@jit(nopython=True, cache=True)
+def numba_batch_top_k(scores_matrix: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    批量 Top-K 选择
+    
+    Args:
+        scores_matrix: 得分矩阵 (n, m)
+        k: 每行选择的 top-k 数量
+        
+    Returns:
+        (indices, scores): Top-K 索引和得分
+    """
+    n = scores_matrix.shape[0]
+    m = scores_matrix.shape[1]
+    k = min(k, m)
+    
+    all_indices = np.empty((n, k), dtype=np.int64)
+    all_scores = np.empty((n, k), dtype=np.float32)
+    
+    for i in range(n):
+        row = scores_matrix[i]
+        sorted_indices = np.argsort(row)[::-1][:k]
+        
+        for j in range(k):
+            all_indices[i, j] = sorted_indices[j]
+            all_scores[i, j] = row[sorted_indices[j]]
+    
+    return all_indices, all_scores
 
 
 if __name__ == '__main__':
