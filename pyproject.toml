@@ -47,10 +47,12 @@ dependencies = [
 [project.optional-dependencies]
 gritlm = ["gritlm>=1.0.0"]
 vllm = ["vllm>=0.6.0; sys_platform != 'win32'"]
-dev = ["pytest", "ruff", "flake8"]
+rust = ["maturin>=1.0.0"]
+dev = ["pytest", "ruff", "flake8", "maturin>=1.0.0"]
 all = [
     "gritlm>=1.0.0",
     "vllm>=0.6.0; sys_platform != 'win32'",
+    "maturin>=1.0.0",
 ]
 
 [project.urls]
