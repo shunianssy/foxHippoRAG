@@ -12,10 +12,8 @@ import json
 import os
 import logging
 import time
-from dataclasses import asdict
-from typing import List, Set, Dict, Tuple, Optional
+from typing import List, Set, Dict, Tuple
 import numpy as np
-from collections import defaultdict
 from tqdm import tqdm
 import re
 import hashlib
@@ -47,8 +45,6 @@ from .utils.config_utils import BaseConfig
 from .utils.performance_utils import (
     PPRCache,
     EmbeddingCache,
-    PerformanceMonitor,
-    global_performance_monitor
 )
 
 logger = logging.getLogger(__name__)

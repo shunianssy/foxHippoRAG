@@ -23,7 +23,7 @@ import os
 import sqlite3
 import time
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Callable, TypeVar, ParamSpec, TYPE_CHECKING, Awaitable
+from typing import Any, Dict, List, Optional, Tuple, Callable, TypeVar, ParamSpec, Awaitable
 from dataclasses import dataclass
 from functools import wraps
 from collections import OrderedDict
@@ -48,9 +48,7 @@ def _get_numpy():
         _numpy = numpy
     return _numpy
 
-# 类型检查时导入（不影响运行时性能）
-if TYPE_CHECKING:
-    import aiohttp
+
 
 logger = logging.getLogger(__name__)
 
