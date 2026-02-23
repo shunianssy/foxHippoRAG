@@ -7,7 +7,9 @@ name = "foxHippoRAG"
 version = "1.0.0"
 description = "A powerful graph-based RAG framework (foxHippoRAG distribution) that enables LLMs to identify and leverage connections within new knowledge for improved retrieval."
 readme = "README.md"
-license = {text = "AGPL-3.0-or-later"}
+
+license = { text = "GNU Affero General Public License v3.0" }
+
 authors = [
     {name = "shunianssy", email = "shunianssy@example.com"}
 ]
