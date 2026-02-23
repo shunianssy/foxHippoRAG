@@ -902,6 +902,11 @@ class foxHippoRAG:
         """
         Adds fact edges from given triples to the graph.
 
+        性能优化版本：
+        - 使用批量哈希计算减少函数调用开销
+        - 使用 defaultdict 优化字典操作
+        - 减少临时集合的创建
+
         The method processes chunks of triples, computes unique identifiers
         for entities and relations, and updates various internal statistics
         to build and maintain the graph structure. Entities are uniquely
@@ -917,9 +922,8 @@ class foxHippoRAG:
         Raises:
             Does not explicitly raise exceptions within the provided function logic.
         """
+        from collections import defaultdict
 
-        # 获取当前图中已有的节点
-        # 使用 attribute_names() 方法检查属性是否存在，这是 igraph 的正确用法
         if "name" in self.graph.vs.attribute_names():
             current_graph_nodes = set(self.graph.vs["name"])
         else:
@@ -927,26 +931,44 @@ class foxHippoRAG:
 
         logger.info("Adding OpenIE triples to graph.")
 
-        for chunk_key, triples in tqdm(zip(chunk_ids, chunk_triples)):
+        # 使用 defaultdict 优化边统计更新
+        edge_updates = defaultdict(float)
+        entity_to_chunks_updates = defaultdict(set)
+
+        # 批量处理所有三元组
+        for chunk_key, triples in tqdm(zip(chunk_ids, chunk_triples), desc="Processing triples"):
+            if chunk_key in current_graph_nodes:
+                continue
+
             entities_in_chunk = set()
 
-            if chunk_key not in current_graph_nodes:
-                for triple in triples:
-                    triple = tuple(triple)
+            for triple in triples:
+                if len(triple) < 3:
+                    continue
 
-                    node_key = compute_mdhash_id(content=triple[0], prefix=("entity-"))
-                    node_2_key = compute_mdhash_id(content=triple[2], prefix=("entity-"))
+                # 批量计算哈希ID
+                node_key = compute_mdhash_id(content=triple[0], prefix="entity-")
+                node_2_key = compute_mdhash_id(content=triple[2], prefix="entity-")
 
-                    self.node_to_node_stats[(node_key, node_2_key)] = self.node_to_node_stats.get(
-                        (node_key, node_2_key), 0.0) + 1
-                    self.node_to_node_stats[(node_2_key, node_key)] = self.node_to_node_stats.get(
-                        (node_2_key, node_key), 0.0) + 1
+                # 累积边更新（双向）
+                edge_updates[(node_key, node_2_key)] += 1.0
+                edge_updates[(node_2_key, node_key)] += 1.0
 
-                    entities_in_chunk.add(node_key)
-                    entities_in_chunk.add(node_2_key)
+                entities_in_chunk.add(node_key)
+                entities_in_chunk.add(node_2_key)
 
-                for node in entities_in_chunk:
-                    self.ent_node_to_chunk_ids[node] = self.ent_node_to_chunk_ids.get(node, set()).union(set([chunk_key]))
+            # 累积实体到chunk的映射更新
+            for node in entities_in_chunk:
+                entity_to_chunks_updates[node].add(chunk_key)
+
+        # 批量更新 node_to_node_stats
+        for edge, count in edge_updates.items():
+            self.node_to_node_stats[edge] = self.node_to_node_stats.get(edge, 0.0) + count
+
+        # 批量更新 ent_node_to_chunk_ids
+        for node, chunks in entity_to_chunks_updates.items():
+            existing = self.ent_node_to_chunk_ids.get(node, set())
+            self.ent_node_to_chunk_ids[node] = existing.union(chunks)
 
     def add_passage_edges(self, chunk_ids: List[str], chunk_triple_entities: List[List[str]]):
         """

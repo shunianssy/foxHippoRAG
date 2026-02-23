@@ -11,6 +11,16 @@ from .llm_utils import filter_invalid_triples
 
 logger = logging.getLogger(__name__)
 
+# 尝试导入 Numba 优化的归一化函数
+try:
+    from .numba_utils import numba_min_max_normalize, is_numba_available
+    USE_NUMBA = is_numba_available()
+    if USE_NUMBA:
+        logger.debug("使用 Numba 优化的 min_max_normalize 函数")
+except ImportError:
+    USE_NUMBA = False
+    logger.debug("Numba 不可用，使用纯 Python 版本的 min_max_normalize")
+
 @dataclass
 class NerRawOutput:
     chunk_id: str
@@ -102,6 +112,26 @@ def flatten_facts(chunk_triples: List[Triple]) -> List[Triple]:
     return graph_triples
 
 def min_max_normalize(x):
+    """
+    Min-Max 归一化函数
+    
+    将数组归一化到 [0, 1] 范围。
+    如果 Numba 可用，使用 Numba JIT 编译的优化版本，
+    否则使用纯 NumPy 实现。
+    
+    Args:
+        x: 输入数组
+        
+    Returns:
+        归一化后的数组
+    """
+    if USE_NUMBA:
+        try:
+            return numba_min_max_normalize(x)
+        except Exception as e:
+            logger.warning(f"Numba 优化失败，回退到纯 Python: {e}")
+    
+    # 纯 NumPy 实现（回退方案）
     min_val = np.min(x)
     max_val = np.max(x)
     range_val = max_val - min_val

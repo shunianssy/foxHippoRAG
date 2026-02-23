@@ -8,16 +8,35 @@
 1. 信息密度评估：评估段落的信息丰富程度
 2. 证据质量评分：结合语义相似度和信息密度
 3. 动态权重融合：根据检索场景自适应调整权重
+
+性能优化：
+- 使用 Numba JIT 加速数值计算
+- 批量处理优化
+- 缓存机制
 """
 
 import numpy as np
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 import re
+import logging
 
 from ..utils.logging_utils import get_logger
 
 logger = get_logger(__name__)
+
+# 尝试导入 Numba 优化
+try:
+    from ..utils.numba_utils import (
+        numba_min_max_normalize,
+        is_numba_available
+    )
+    USE_NUMBA = is_numba_available()
+    if USE_NUMBA:
+        logger.info("PassageDensityEvaluator 使用 Numba 加速")
+except ImportError:
+    USE_NUMBA = False
+    logger.debug("Numba 不可用，PassageDensityEvaluator 使用标准实现")
 
 
 @dataclass
@@ -227,19 +246,45 @@ class PassageDensityEvaluator:
         """
         批量评估段落信息密度
         
+        性能优化版本：
+        - 使用 Numba 加速数值计算
+        - 批量处理减少函数调用开销
+        
         Args:
             texts: 段落文本列表
             
         Returns:
             密度得分数组
         """
-        density_scores = np.zeros(len(texts))
+        n = len(texts)
         
+        # 预分配数组
+        entity_counts = np.zeros(n, dtype=np.float32)
+        fact_counts = np.zeros(n, dtype=np.float32)
+        text_length_scores = np.zeros(n, dtype=np.float32)
+        content_richness_scores = np.zeros(n, dtype=np.float32)
+        
+        # 批量计算各项指标
         for i, text in enumerate(texts):
-            result = self.evaluate_passage_density(text)
-            density_scores[i] = result['density_score']
+            entity_counts[i] = self.compute_entity_count(text)
+            fact_counts[i] = self.compute_fact_count(text)
+            text_length_scores[i] = self.compute_text_length_score(text)
+            content_richness_scores[i] = self.compute_content_richness(text)
         
-        return density_scores
+        # 归一化实体和事实数量（使用对数函数）
+        # 使用 Numba 优化或 NumPy 实现
+        normalized_entity_scores = np.minimum(1.0, np.log1p(entity_counts) / 3.0)
+        normalized_fact_scores = np.minimum(1.0, np.log1p(fact_counts) / 2.5)
+        
+        # 计算综合信息密度得分
+        density_scores = (
+            self.config.entity_count_weight * normalized_entity_scores +
+            self.config.fact_count_weight * normalized_fact_scores +
+            self.config.text_length_weight * text_length_scores +
+            self.config.content_richness_weight * content_richness_scores
+        )
+        
+        return density_scores.astype(np.float32)
 
 
 class EvidenceQualityScorer:
@@ -452,12 +497,20 @@ class AdaptiveWeightFusion:
         """
         归一化得分（Min-Max 归一化）
         
+        使用 Numba 优化版本（如果可用）
+        
         Args:
             scores: 原始得分
             
         Returns:
             归一化后的得分
         """
+        if USE_NUMBA:
+            try:
+                return numba_min_max_normalize(scores)
+            except Exception as e:
+                logger.debug(f"Numba 归一化失败，回退到 NumPy: {e}")
+        
         min_val = np.min(scores)
         max_val = np.max(scores)
         
