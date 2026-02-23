@@ -974,6 +974,11 @@ class foxHippoRAG:
         """
         Adds edges connecting passage nodes to phrase nodes in the graph.
 
+        性能优化版本：
+        - 使用集合操作快速过滤已存在的节点
+        - 批量构建边更新
+        - 减少循环内的条件判断
+
         This method is responsible for iterating through a list of chunk identifiers
         and their corresponding triple entities. It calculates and adds new edges
         between the passage nodes (defined by the chunk identifiers) and the phrase
@@ -992,27 +997,35 @@ class foxHippoRAG:
             int
                 The number of new passage nodes added to the graph.
         """
-
         if "name" in self.graph.vs.attribute_names():
             current_graph_nodes = set(self.graph.vs["name"])
         else:
             current_graph_nodes = set()
 
-        num_new_chunks = 0
-
         logger.info("Connecting passage nodes to phrase nodes.")
 
-        for idx, chunk_key in tqdm(enumerate(chunk_ids)):
+        # 预过滤：找出需要处理的 chunk_ids
+        new_chunk_mask = np.array([chunk_key not in current_graph_nodes for chunk_key in chunk_ids])
+        num_new_chunks = np.sum(new_chunk_mask)
 
-            if chunk_key not in current_graph_nodes:
-                for chunk_ent in chunk_triple_entities[idx]:
-                    node_key = compute_mdhash_id(chunk_ent, prefix="entity-")
+        if num_new_chunks == 0:
+            return 0
 
-                    self.node_to_node_stats[(chunk_key, node_key)] = 1.0
+        # 批量构建边
+        edge_updates = {}
+        
+        for idx, chunk_key in enumerate(chunk_ids):
+            if chunk_key in current_graph_nodes:
+                continue
 
-                num_new_chunks += 1
+            for chunk_ent in chunk_triple_entities[idx]:
+                node_key = compute_mdhash_id(chunk_ent, prefix="entity-")
+                edge_updates[(chunk_key, node_key)] = 1.0
 
-        return num_new_chunks
+        # 批量更新
+        self.node_to_node_stats.update(edge_updates)
+
+        return int(num_new_chunks)
 
     def add_synonymy_edges(self):
         """
