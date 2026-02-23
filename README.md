@@ -13,9 +13,7 @@
 
 与之前的版本一样，foxHippoRAG 在在线过程中保持成本和延迟效率，同时与其他基于图的解决方案（如 GraphRAG、RAPTOR 和 LightRAG）相比，离线索引使用的资源显著减少。
 
-与之前的版本一样，foxHippoRAG 在在线过程中保持成本和延迟效率，同时与其他基于图的解决方案（如 GraphRAG、RAPTOR 和 LightRAG）相比，离线索引使用的资源显著减少。
-
-本仓库旨在优化 foxHippoRAG 的内存框架，以提高其在复杂任务上的性能，添加了大量异步处理和并行计算，以提高效率。
+本仓库旨在优化 HippoRAG 的内存框架，以提高其在复杂任务上的性能，添加了大量异步处理和并行计算，以提高效率，组成独立发行版，命名为 foxHippoRAG。
 
 本项目小狐狸有意维护，可以参见[foxHippoRAG](https://github.com/shunianssy/foxHippoRAG)作为代码托管，可以参见[Blog](https://i.shunx.top)追踪最新动态。
 
@@ -404,7 +402,6 @@ When preparing your data, you may need to chunk each passage, as longer passage 
 │-- 📜 requirements.txt   # Dependencies list
 │-- 📜 .gitignore         # Files to exclude from Git
 
-
 ```
 
 ## Contact
@@ -444,6 +441,6 @@ If you find this work useful, please consider citing our papers:
 
 - [x] Add support for more embedding models
 - [x] Add support for embedding endpoints
-- [ ] Add support for vector database integration
+- [x] Add support for vector database integration
 
 Please feel free to open an issue or PR if you have any questions or suggestions.

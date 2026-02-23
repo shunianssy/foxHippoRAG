@@ -95,4 +95,4 @@ jobs:
           python -c "import glob, subprocess, sys; wheels = glob.glob('dist/*.whl'); subprocess.check_call([sys.executable, '-m', 'pip', 'install', wheels[0]]) if wheels else sys.exit('No wheel file found')"
 
       - name: 验证安装
-        run: python -c "import foxhipporag; print('foxHippoRAG 导入成功')"
+        run: python -c "import foxhipporag; print('foxHippoRAG imported successfully')"
