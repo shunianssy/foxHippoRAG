@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "foxHippoRAG"
-version = "1.0.5"
+version = "1.0.6"
 description = "A powerful graph-based RAG framework (foxHippoRAG distribution) that enables LLMs to identify and leverage connections within new knowledge for improved retrieval."
 readme = "README.md"
 
 license = { text = "GNU Affero General Public License v3.0" }
 
 authors = [
-    {name = "shunianssy", email = "shunianssy@example.com"}
+    {name = "shunianssy", email = "shunianssy@163.com"}
 ]
 requires-python = ">=3.10"
 classifiers = [

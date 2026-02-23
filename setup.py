@@ -32,7 +32,7 @@ setuptools.setup(
     name="foxHippoRAG",
     version="1.0.0",
     author="shunianssy",
-    author_email="shunianssy@example.com",
+    author_email="shunianssy@163.com",
     description="A powerful graph-based RAG framework (foxHippoRAG distribution) that enables LLMs to identify and leverage connections within new knowledge for improved retrieval.",
     long_description=long_description,
     long_description_content_type="text/markdown",
