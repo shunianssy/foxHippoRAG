@@ -3,7 +3,9 @@ hipporag2/*
 .venv/
 tests/
 docs/
-foxhipporag_rust/
+foxhipporag_rust/target/
+.trae/
+
 # Ignore test files
 test_example.py
 test_example.ipynb

@@ -247,8 +247,8 @@ class OptimizedfoxHippoRAG:
         # 插入文档到chunk存储
         self.chunk_embedding_store.insert_strings(docs)
         
-        # 标记为可检索
-        self.ready_to_retrieve = False
+        # 标记为可检索（索引完成后应设置为True）
+        self.ready_to_retrieve = True
         
         logger.info(f"Fast indexing completed for {len(docs)} documents")
 
