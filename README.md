@@ -3,22 +3,34 @@
     <img src="https://github.com/shunianssy/foxHippoRAG/raw/main/images/hippo_brain.png" width="55%" style="max-width: 300px;">
 </p>
 
-[<img align="center" src="https://colab.research.google.com/assets/colab-badge.svg" />](https://colab.research.google.com/drive/1nuelysWsXL8F5xH6q4JYJI8mvtlmeM9O#scrollTo=TjHdNe2KC81K)
 
-[<img align="center" src="https://img.shields.io/badge/GitHub-foxHippoRAG-blue" />](https://github.com/shunianssy/foxHippoRAG)
+## [Github](https://github.com/shunianssy/foxHippoRAG) | [爱发电 or afdian](https://afdian.com/a/shunianssy) | [Blog](https://i.shunx.top)
 
-### foxHippoRAG 是一个强大的记忆框架，用于增强大型语言模型识别和利用新知识中连接的能力——这反映了人类长期记忆的关键功能。
+## foxHippoRAG 是一个强大的记忆框架，用于增强大型语言模型识别和利用新知识中连接的能力——这反映了人类长期记忆的关键功能。
 
-我们的实验表明，foxHippoRAG 在甚至最先进的 RAG 系统中也能提高关联性（多跳检索）和意义构建（整合大型复杂上下文的过程），同时不牺牲它们在简单任务上的性能。
+foxHippoRAG is a powerful memory framework designed to enhance the ability of large language models to recognize and utilize connections in new knowledge - this reflects the key function of human long-term memory.
 
-与之前的版本一样，foxHippoRAG 在在线过程中保持成本和延迟效率，同时与其他基于图的解决方案（如 GraphRAG、RAPTOR 和 LightRAG）相比，离线索引使用的资源显著减少。
+### 我们的实验表明，foxHippoRAG 在甚至最先进的 RAG 系统中也能提高关联性（多跳检索）和意义构建（整合大型复杂上下文的过程），同时不牺牲它们在简单任务上的性能
 
-本仓库旨在优化 HippoRAG 的内存框架，以提高其在复杂任务上的性能，添加了大量异步处理和并行计算，以提高效率，组成独立发行版，命名为 foxHippoRAG。
+Our experiments have shown that foxHippoRAG can enhance relevance (multi-hop retrieval) and meaning construction (the process of integrating large and complex contexts) even in the most advanced RAG systems, without sacrificing their performance in simple tasks.
 
-本项目小狐狸有意维护，可以参见[foxHippoRAG](https://github.com/shunianssy/foxHippoRAG)作为代码托管，可以参见[Blog](https://i.shunx.top)追踪最新动态。
+与之前的版本一样，foxHippoRAG 在在线过程中保持成本和延迟效率，同时与其他基于图的解决方案（如 GraphRAG、RAPTOR 和 LightRAG）相比，离线索引使用的资源显著减少
 
+Like the previous version, foxHippoRAG maintains cost and latency efficiency during the online process. Moreover, compared with other graph-based solutions (such as GraphRAG, RAPTOR, and LightRAG), it significantly reduces the resources used for offline indexing.
 
-HippoRAG 项目测试
+### 本仓库旨在优化 HippoRAG 的内存框架，以提高其在复杂任务上的性能，添加了大量异步处理和并行计算，以提高效率，组成独立发行版，命名为 foxHippoRAG
+
+This repository aims to optimize the memory framework of HippoRAG to enhance its performance in complex tasks. It incorporates a large number of asynchronous processing and parallel computing techniques to increase efficiency. It has been developed into an independent distribution and is named foxHippoRAG.
+
+本项目添加了高速处理选项以适配日常需求，并添加了更多功能以支持更多场景。
+
+This project has added high-speed processing options to meet daily requirements, and has also incorporated more functions to support a wider range of scenarios.
+
+### 本项目小狐狸有意维护，可以参见[foxHippoRAG](https://github.com/shunianssy/foxHippoRAG)作为代码托管，可以参见[Blog](https://i.shunx.top)追踪最新动态。
+
+This project is maintained by Little Fox. You can refer to [foxHippoRAG](https://github.com/shunianssy/foxHippoRAG) for code hosting and [Blog](https://i.shunx.top) for tracking the latest updates.
+
+# HippoRAG 项目测试
 <p align="center">
   <img align="center" src="https://github.com/shunianssy/foxHippoRAG/raw/main/images/intro.png" />
 </p>
@@ -321,7 +333,7 @@ The corpus and optional query JSON files should have the following format:
 
 #### (Optional) Query JSON
 
-
+```
 [
   {
     "id": "sample/question_1.json",
@@ -443,4 +455,10 @@ If you find this work useful, please consider citing our papers:
 - [x] Add support for embedding endpoints
 - [x] Add support for vector database integration
 
+如果您有任何疑问或建议，请随时提出问题或提交 Pull Request（代码提交请求）。
+
 Please feel free to open an issue or PR if you have any questions or suggestions.
+
+如果你有余力，欢迎赞助小狐狸的下一个项目或者下一个月吃饭的家伙[爱发电](https://afdian.com/a/shunianssy)
+
+If you have the spare time, we sincerely invite you to sponsor Little Fox's next project or the person who provides meals next month [afdian](https://afdian.com/a/shunianssy)
