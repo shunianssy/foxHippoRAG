@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "foxHippoRAG"
-version = "1.0.3"
+version = "1.0.4"
 description = "A powerful graph-based RAG framework (foxHippoRAG distribution) that enables LLMs to identify and leverage connections within new knowledge for improved retrieval."
 readme = "README.md"
 
