@@ -1,10 +1,8 @@
 import setuptools
-import platform
 
 with open("README.md", "r", encoding="utf-8") as f:
     long_description = f.read()
 
-# 基础依赖
 install_requires = [
     "torch>=2.0.0",
     "transformers>=4.40.0",
@@ -20,14 +18,14 @@ install_requires = [
     "boto3",
 ]
 
-# vllm 仅在非 Windows 平台上支持
-if platform.system() != "Windows":
-    install_requires.append("vllm>=0.6.0")
-
-# gritlm 作为可选依赖
 extras_require = {
     "gritlm": ["gritlm>=1.0.0"],
+    "vllm": ["vllm>=0.6.0; sys_platform != 'win32'"],
     "dev": ["pytest", "ruff", "flake8"],
+    "all": [
+        "gritlm>=1.0.0",
+        "vllm>=0.6.0; sys_platform != 'win32'",
+    ],
 }
 
 setuptools.setup(

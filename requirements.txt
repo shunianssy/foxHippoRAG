@@ -1,14 +1,13 @@
+# 核心依赖 (跨平台兼容)
 openai>=1.91.0
 litellm>=1.73.0
-vllm==0.6.6.post1
-gritlm==1.0.2
-torch==2.5.1
-transformers==4.45.2
-networkx==3.4.2
-pydantic==2.10.4
-python_igraph==0.11.8
-tenacity==8.5.0
-tiktoken==0.7.0
+torch>=2.0.0
+transformers>=4.40.0
+networkx>=3.0
+pydantic>=2.0.0
+python_igraph>=0.11.0
+tenacity>=8.0.0
+tiktoken>=0.7.0
 nest_asyncio
 numpy
 scipy
@@ -16,6 +15,13 @@ tqdm
 einops
 boto3
 pyarrow>=14.0.0
+
+# 可选依赖 - vllm (仅 Linux 支持)
+# 注意: vllm 在 Windows 上不支持，请勿在 Windows 环境下安装
+# vllm>=0.6.0  # 仅 Linux
+
+# 可选依赖 - gritlm (用于嵌入模型)
+# gritlm>=1.0.0
 
 # Vector Database backends (optional - install as needed)
 # FAISS - efficient local vector search

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foxHippoRAG"
+version = "1.0.0"
+description = "A powerful graph-based RAG framework (foxHippoRAG distribution) that enables LLMs to identify and leverage connections within new knowledge for improved retrieval."
+readme = "README.md"
+license = {text = "AGPL-3.0-or-later"}
+authors = [
+    {name = "shunianssy", email = "shunianssy@example.com"}
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = ["rag", "llm", "graph", "retrieval", "knowledge-graph"]
+
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "openai>=1.91.0",
+    "litellm>=1.73.0",
+    "networkx>=3.0",
+    "python_igraph>=0.11.0",
+    "tiktoken>=0.7.0",
+    "pydantic>=2.0.0",
+    "tenacity>=8.0.0",
+    "einops",
+    "tqdm",
+    "boto3",
+    "aiohttp>=3.9.0",
+    "aiosqlite>=0.19.0",
+]
+
+[project.optional-dependencies]
+gritlm = ["gritlm>=1.0.0"]
+vllm = ["vllm>=0.6.0; sys_platform != 'win32'"]
+dev = ["pytest", "ruff", "flake8"]
+all = [
+    "gritlm>=1.0.0",
+    "vllm>=0.6.0; sys_platform != 'win32'",
+]
+
+[project.urls]
+Homepage = "https://github.com/shunianssy/foxHippoRAG"
+Repository = "https://github.com/shunianssy/foxHippoRAG"
+Issues = "https://github.com/shunianssy/foxHippoRAG/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed", "*.json"]

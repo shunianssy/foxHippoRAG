@@ -353,6 +353,32 @@ class BaseConfig:
         metadata={"help": "Enable parallel retrieval."}
     )
     
+    # Fast mode optimization attributes
+    use_fast_index: bool = field(
+        default=False,
+        metadata={"help": "Use fast index mode (skip OpenIE, DPR only). Significantly faster indexing."}
+    )
+    use_fast_retrieve: bool = field(
+        default=False,
+        metadata={"help": "Use fast retrieve mode (DPR only, skip graph search). Faster retrieval."}
+    )
+    ppr_cache_size: int = field(
+        default=100,
+        metadata={"help": "Maximum number of PPR results to cache in memory."}
+    )
+    embedding_cache_size: int = field(
+        default=1000,
+        metadata={"help": "Maximum number of embeddings to cache in memory."}
+    )
+    enable_query_cache: bool = field(
+        default=True,
+        metadata={"help": "Enable query embedding cache to avoid repeated encoding."}
+    )
+    preload_embeddings: bool = field(
+        default=True,
+        metadata={"help": "Preload all embeddings into memory for faster retrieval."}
+    )
+    
     # Save dir (highest level directory)
     save_dir: str = field(
         default=None,

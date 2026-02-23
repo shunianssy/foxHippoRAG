@@ -1,0 +1,31 @@
+torch>=2.0.0
+transformers>=4.40.0
+openai>=1.91.0
+litellm>=1.73.0
+networkx>=3.0
+python_igraph>=0.11.0
+tiktoken>=0.7.0
+pydantic>=2.0.0
+tenacity>=8.0.0
+einops
+tqdm
+boto3
+
+[all]
+gritlm>=1.0.0
+
+[all:sys_platform != "win32"]
+vllm>=0.6.0
+
+[dev]
+pytest
+ruff
+flake8
+
+[gritlm]
+gritlm>=1.0.0
+
+[vllm]
+
+[vllm:sys_platform != "win32"]
+vllm>=0.6.0

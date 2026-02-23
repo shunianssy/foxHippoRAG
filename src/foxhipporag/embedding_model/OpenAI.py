@@ -102,8 +102,6 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             根据 OpenAI 官方文档，直接传入原始文本即可。
             参考: https://platform.openai.com/docs/guides/embeddings
         """
-        # OpenAI embedding API 不支持 instruction，直接使用原始文本
-        # 这与其他模型（如 NVEmbedV2、GritLM）的行为不同
         texts = [t.replace("\n", " ") for t in texts]
         texts = [t if t != '' else ' ' for t in texts]
         
@@ -111,17 +109,33 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             try:
                 response = self.client.embeddings.create(input=texts, model=self.embedding_model_name)
                 results = np.array([v.embedding for v in response.data])
+                # 记录实际的嵌入维度
+                self._embedding_dim = results.shape[1] if len(results.shape) > 1 else 1536
                 return results
             except Exception as e:
                 logger.warning(f"Encoding attempt {attempt + 1} failed: {e}")
                 if attempt == max_retries - 1:
                     logger.error(f"All {max_retries} encoding attempts failed")
                     raise
-                # 等待后重试
                 import time
                 time.sleep(1 * (attempt + 1))
         
         return np.array([])
+    
+    @property
+    def embedding_dim(self) -> int:
+        """获取嵌入向量维度"""
+        if not hasattr(self, '_embedding_dim'):
+            # 根据模型名称推断维度
+            if 'text-embedding-3-small' in self.embedding_model_name:
+                self._embedding_dim = 1536
+            elif 'text-embedding-3-large' in self.embedding_model_name:
+                self._embedding_dim = 3072
+            elif 'text-embedding-ada-002' in self.embedding_model_name:
+                self._embedding_dim = 1536
+            else:
+                self._embedding_dim = 1536  # 默认维度
+        return self._embedding_dim
 
     def batch_encode(self, texts: List[str], **kwargs) -> np.ndarray:
         """
@@ -149,9 +163,6 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         if kwargs: 
             params.update(kwargs)
 
-        # OpenAI embedding API 不支持 instruction 前缀
-        # 忽略 instruction 参数，直接使用原始文本
-        # 这与 NVEmbedV2、GritLM 等模型的行为不同
         instruction = params.pop("instruction", "")
         if instruction:
             logger.debug(f"OpenAI embedding API does not support instruction prefix, ignoring: {instruction[:50]}...")
@@ -169,11 +180,13 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             for i in range(0, len(texts), batch_size):
                 batch = texts[i:i + batch_size]
                 try:
-                    results.append(self.encode(batch))
+                    batch_result = self.encode(batch)
+                    results.append(batch_result)
                 except Exception as e:
                     logger.error(f"Encoding batch failed: {e}")
-                    # 用零向量填充失败的批次
-                    results.append(np.zeros((len(batch), 1536)))  # OpenAI默认维度
+                    # 用零向量填充失败的批次（使用正确的维度）
+                    dim = self.embedding_dim
+                    results.append(np.zeros((len(batch), dim)))
                 pbar.update(len(batch))
             pbar.close()
             results = np.concatenate(results)
@@ -181,10 +194,10 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             # 大批量，并行处理
             logger.info(f"Parallel encoding {len(texts)} texts with {self.max_workers} workers")
             
-            # 创建批次
             batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
             
             results = [None] * len(batches)
+            first_batch_dim = None  # 记录第一个成功批次的维度
             
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_idx = {
@@ -195,11 +208,27 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
                 for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="Parallel Encoding"):
                     idx = future_to_idx[future]
                     try:
-                        results[idx] = future.result(timeout=60)
+                        batch_result = future.result(timeout=60)
+                        # 检查维度一致性
+                        if first_batch_dim is None:
+                            first_batch_dim = batch_result.shape[1] if len(batch_result.shape) > 1 else batch_result.shape[0]
+                            self._embedding_dim = first_batch_dim
+                        elif batch_result.shape[1] != first_batch_dim:
+                            logger.warning(f"Batch {idx} has different dimension {batch_result.shape[1]} vs expected {first_batch_dim}, padding/truncating")
+                            # 调整维度
+                            if batch_result.shape[1] < first_batch_dim:
+                                # 填充零
+                                padding = np.zeros((batch_result.shape[0], first_batch_dim - batch_result.shape[1]))
+                                batch_result = np.concatenate([batch_result, padding], axis=1)
+                            else:
+                                # 截断
+                                batch_result = batch_result[:, :first_batch_dim]
+                        results[idx] = batch_result
                     except Exception as e:
                         logger.error(f"Parallel encoding batch {idx} failed: {e}")
-                        # 用零向量填充失败的批次
-                        results[idx] = np.zeros((len(batches[idx]), 1536))
+                        # 用零向量填充失败的批次（使用正确的维度）
+                        dim = self.embedding_dim
+                        results[idx] = np.zeros((len(batches[idx]), dim))
             
             results = np.concatenate(results)
 

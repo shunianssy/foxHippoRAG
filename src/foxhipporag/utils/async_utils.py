@@ -284,19 +284,12 @@ class AsyncSQLiteCache:
 class AsyncHTTPClient:
     """异步HTTP客户端（带连接池和重试）"""
     
-    _instance: Optional['AsyncHTTPClient'] = None
-    _session: Optional[Any] = None  # aiohttp.ClientSession
-    
-    def __new__(cls, config: AsyncConfig = None):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
     def __init__(self, config: AsyncConfig = None):
         if config is None:
             config = AsyncConfig()
         self.config = config
         self._semaphore = asyncio.Semaphore(config.max_concurrent_requests)
+        self._session: Optional[Any] = None  # aiohttp.ClientSession
     
     async def get_session(self) -> Any:
         """获取或创建会话（延迟加载 aiohttp）"""
@@ -319,8 +312,9 @@ class AsyncHTTPClient:
     
     async def close(self):
         """关闭会话"""
-        if self._session and not self._session.closed:
+        if self._session is not None and not self._session.closed:
             await self._session.close()
+            self._session = None
     
     async def request(
         self, 
@@ -329,6 +323,7 @@ class AsyncHTTPClient:
         **kwargs
     ) -> Tuple[Any, Dict[str, Any]]:
         """发送请求（带重试和限流）"""
+        aiohttp = _get_aiohttp()
         async with self._semaphore:
             session = await self.get_session()
             
@@ -346,12 +341,17 @@ class AsyncHTTPClient:
                         else:
                             text = await response.text()
                             raise aiohttp.ClientResponseError(
-                                request_info=None,
-                                history=None,
+                                request_info=response.request_info,
+                                history=response.history,
                                 status=response.status,
                                 message=text
                             )
-                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                except aiohttp.ClientError as e:
+                    last_error = e
+                    if attempt < self.config.max_retries - 1:
+                        await asyncio.sleep(self.config.retry_delay * (self.config.retry_backoff ** attempt))
+                    continue
+                except asyncio.TimeoutError as e:
                     last_error = e
                     if attempt < self.config.max_retries - 1:
                         await asyncio.sleep(self.config.retry_delay * (self.config.retry_backoff ** attempt))
@@ -385,7 +385,10 @@ class AsyncOpenAIClient:
         api_key: str,
         base_url: Optional[str] = None,
         config: AsyncConfig = None,
-        cache_dir: str = "outputs/async_cache"
+        cache_dir: str = "outputs/async_cache",
+        # 支持单独的嵌入 API 配置
+        embedding_api_key: Optional[str] = None,
+        embedding_base_url: Optional[str] = None,
     ):
         self.api_key = api_key
         self.base_url = base_url or "https://api.openai.com/v1"
@@ -396,6 +399,14 @@ class AsyncOpenAIClient:
         
         self.headers = {
             "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # 嵌入 API 配置
+        self.embedding_api_key = embedding_api_key or api_key
+        self.embedding_base_url = embedding_base_url or self.base_url
+        self.embedding_headers = {
+            "Authorization": f"Bearer {self.embedding_api_key}",
             "Content-Type": "application/json"
         }
     
@@ -482,7 +493,8 @@ class AsyncOpenAIClient:
             if cached is not None:
                 return np.array(cached['embeddings']), cached['metadata']
         
-        url = f"{self.base_url}/embeddings"
+        # 使用单独的嵌入 API 配置
+        url = f"{self.embedding_base_url}/embeddings"
         payload = {
             "model": model,
             "input": [t.replace("\n", " ") for t in texts]
@@ -490,7 +502,7 @@ class AsyncOpenAIClient:
         
         data, resp_meta = await self.http_client.post(
             url,
-            headers=self.headers,
+            headers=self.embedding_headers,
             json=payload
         )
         

@@ -6,4 +6,9 @@ def get_foxHippoRAG():
     from .foxHippoRAG import foxHippoRAG
     return foxHippoRAG
 
-__all__ = ["foxHippoRAG", "get_foxHippoRAG"]
+def get_OptimizedfoxHippoRAG():
+    """延迟导入优化版 foxHippoRAG 以提高启动速度"""
+    from .foxHippoRAG_optimized import OptimizedfoxHippoRAG
+    return OptimizedfoxHippoRAG
+
+__all__ = ["foxHippoRAG", "get_foxHippoRAG", "OptimizedfoxHippoRAG", "get_OptimizedfoxHippoRAG"]
